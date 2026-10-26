@@ -84,7 +84,9 @@ export class Shell {
 
   close() {
     const pty = this.pty;
+    if (!pty) return;
     this.pty = undefined;
-    pty?.kill();
+    pty.kill();
+    this.publish({ type: 'shell-state', running: false, cwd: this.cwd });
   }
 }

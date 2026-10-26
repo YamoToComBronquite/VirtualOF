@@ -3,7 +3,9 @@ import { Terminal } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
 import type { ClientMessage } from '../shared/types.ts';
 
-/** The PowerShell dock under the office: a real terminal running on this computer. */
+const HEIGHT_KEY = 'virtualof.terminal-altura';
+
+/** The terminal panel along the bottom of the window: a real PowerShell on this computer. */
 export class ShellDock {
   private readonly term = new Terminal({
     fontFamily: 'Cascadia Mono, Consolas, monospace',
@@ -11,10 +13,10 @@ export class ShellDock {
     cursorBlink: true,
     scrollback: 5000,
     theme: {
-      background: '#0b0f0b',
+      background: '#17131f',
       foreground: '#d9f2db',
       cursor: '#5fd86f',
-      selectionBackground: '#2f5a35',
+      selectionBackground: '#3a3155',
     },
   });
   private readonly fit = new FitAddon();
@@ -88,12 +90,61 @@ export class ShellDock {
     this.term.focus();
   }
 
+  /** Ends PowerShell; typing in the panel opens a fresh one. */
+  kill() {
+    this.send({ type: 'shell-kill' });
+  }
+
+  /** Lets the panel fill most of the window, like the editor's maximized terminal. */
+  toggleMaximized(button: HTMLElement) {
+    const on = !this.dock.classList.contains('is-max');
+    this.dock.classList.toggle('is-max', on);
+    button.setAttribute('aria-pressed', String(on));
+    button.title = on ? 'Restaurar tamanho' : 'Maximizar';
+    this.onToggle();
+  }
+
+  /** Dragging the top edge (or arrow keys on it) changes the panel height, remembered per computer. */
+  makeResizable(grip: HTMLElement) {
+    const set = (height: number) => {
+      const max = window.innerHeight - 160;
+      const value = Math.round(Math.min(Math.max(height, 120), max));
+      this.dock.style.setProperty('--shell-h', `${value}px`);
+      try {
+        localStorage.setItem(HEIGHT_KEY, String(value));
+      } catch {
+        // Private windows may refuse storage; the height just resets next time.
+      }
+    };
+    try {
+      const saved = Number(localStorage.getItem(HEIGHT_KEY));
+      if (saved) this.dock.style.setProperty('--shell-h', `${saved}px`);
+    } catch {
+      // Same as above.
+    }
+    grip.addEventListener('pointerdown', (event) => {
+      event.preventDefault();
+      grip.setPointerCapture(event.pointerId);
+      const move = (e: PointerEvent) => set(window.innerHeight - e.clientY);
+      const up = () => {
+        grip.removeEventListener('pointermove', move);
+        grip.removeEventListener('pointerup', up);
+      };
+      grip.addEventListener('pointermove', move);
+      grip.addEventListener('pointerup', up);
+    });
+    grip.addEventListener('keydown', (event) => {
+      const step = event.key === 'ArrowUp' ? 24 : event.key === 'ArrowDown' ? -24 : 0;
+      if (step) set(this.dock.getBoundingClientRect().height + step);
+    });
+  }
+
   output(data: string) {
     this.term.write(data);
   }
 
   state(running: boolean, cwd: string) {
-    this.cwdLabel.textContent = running ? cwd : 'fechado: digite algo para abrir de novo';
+    this.cwdLabel.textContent = running ? cwd : 'encerrado: digite algo para abrir de novo';
   }
 
   /** After reconnecting, the server resends the scrollback, so start from a clean screen. */

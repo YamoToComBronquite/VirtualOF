@@ -29,6 +29,7 @@ body {
   height: 100vh;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 380px;
+  grid-template-rows: minmax(0, 1fr) auto;
   background: var(--night);
   color: var(--text);
   font: 15px/1.45 var(--body);
@@ -1229,29 +1230,64 @@ select {
   }
 }
 
-/* The PowerShell dock under the office */
+/* The terminal panel along the bottom, like the one in a code editor */
+
+.office {
+  grid-row: 1;
+  grid-column: 1;
+}
+
+.panel {
+  grid-row: 1;
+  grid-column: 2;
+}
 
 .shell {
+  --shell-h: 260px;
+  position: relative;
+  grid-row: 2;
+  grid-column: 1 / -1;
   display: flex;
   flex-direction: column;
-  height: 38vh;
-  min-height: 180px;
-  background: #0b0f0b;
-  border-top: 1px solid #2f5a35;
+  height: var(--shell-h);
+  background: #17131f;
+  border-top: 1px solid var(--line);
+}
+
+.shell.is-max {
+  height: calc(100vh - 120px);
+}
+
+.shell__grip {
+  position: absolute;
+  inset: -3px 0 auto;
+  height: 6px;
+  cursor: ns-resize;
+  z-index: 1;
+}
+
+.shell__grip:hover,
+.shell__grip:focus-visible {
+  background: #5fd86f55;
+  outline: none;
 }
 
 .shell__head {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 6px 12px;
-  border-bottom: 1px solid #1c2e1e;
+  gap: 12px;
+  height: 34px;
+  padding: 0 8px 0 16px;
+  flex: none;
 }
 
-.shell__head h2 {
+.shell__tab {
   margin: 0;
-  font: 700 14px var(--pixel);
-  color: #5fd86f;
+  padding: 3px 8px;
+  font: 600 13px var(--body);
+  color: var(--text);
+  background: var(--plum-raised);
+  border-radius: 4px;
 }
 
 .shell__cwd {
@@ -1264,10 +1300,52 @@ select {
   text-overflow: ellipsis;
 }
 
+.shell__kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  color: #5fd86f;
+}
+
+.shell__kind svg,
+.shell button.icon svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.shell__tools {
+  display: flex;
+  gap: 2px;
+}
+
+.shell button.icon {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 26px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: var(--muted);
+}
+
+.shell button.icon:hover,
+.shell button.icon[aria-pressed='true'] {
+  background: var(--plum-raised);
+  color: var(--text);
+}
+
 .shell__screen {
   flex: 1;
   min-height: 0;
-  padding: 6px 0 0 10px;
+  padding: 2px 0 0 16px;
 }
 
 #open-shell[aria-pressed='true'] {

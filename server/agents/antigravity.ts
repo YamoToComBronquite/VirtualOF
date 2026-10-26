@@ -56,7 +56,7 @@ export function watchAntigravity(settings: OfficeConfig['antigravity'], office: 
           status: active ? 'writing' : 'idle',
           activity,
           controllable: false,
-          usage: { inputTokens: 0, outputTokens: 0 },
+          usage: { tasks: 0, inputTokens: 0, outputTokens: 0 },
         });
         return;
       }

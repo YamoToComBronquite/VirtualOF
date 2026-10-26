@@ -138,7 +138,8 @@ export class Team {
     const key = this.overrides.get(id) ?? config?.papel ?? 'folga';
     const instructions = key === 'folga' ? '' : this.config.papeis[key].instrucoes;
     const named = config?.apelido ? `\n\nNeste escritório, o usuário te chama de "${config.apelido}".` : '';
-    return { key, instructions: instructions + named, model: config?.modelo ?? '' };
+    const english = this.office.lang === 'en' ? '\n\nAlways reply to the user in English.' : '';
+    return { key, instructions: instructions + named + english, model: config?.modelo ?? '' };
   }
 
   /** Applies Configurações: order, roles, nicknames and models. Returns an error message, or null. */

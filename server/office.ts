@@ -3,6 +3,7 @@ import type {
   Account,
   AgentStatus,
   AgentView,
+  Lang,
   LogEntry,
   LogKind,
   ModelCatalog,
@@ -54,6 +55,8 @@ export class Office {
   };
   /** Hand a step to another agent when its account hits the limit. */
   autoSwitch = true;
+  /** Language chosen in Ajustes; agents are told to reply in it. */
+  lang: Lang = 'pt';
   /** Models each engine offers, for Configurações. */
   models: ModelCatalog = { claude: [], codex: [], antigravity: [] };
   private nextLogId = 1;
@@ -81,6 +84,7 @@ export class Office {
       autoSwitch: this.autoSwitch,
       models: this.models,
       project: this.project,
+      lang: this.lang,
     };
   }
 

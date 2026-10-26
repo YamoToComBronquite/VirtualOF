@@ -129,6 +129,9 @@ export interface Plan {
   summary?: string;
 }
 
+/** Language of the page and of the agents' replies. */
+export type Lang = 'pt' | 'en';
+
 export type ServerMessage =
   | {
       type: 'snapshot';
@@ -141,7 +144,9 @@ export type ServerMessage =
       autoSwitch: boolean;
       models: ModelCatalog;
       project: string;
+      lang: Lang;
     }
+  | { type: 'language'; lang: Lang }
   | { type: 'models'; models: ModelCatalog }
   | { type: 'skills'; skills: SkillCatalog }
   | { type: 'skill-imported'; ok: boolean; message: string }
@@ -184,4 +189,5 @@ export type ClientMessage =
   | { type: 'import-skill'; files: SkillFile[] }
   | { type: 'share-skills' }
   | { type: 'stop-plan' }
+  | { type: 'language'; lang: Lang }
   | { type: 'project'; path: string };

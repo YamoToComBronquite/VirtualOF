@@ -15,7 +15,9 @@ import {
   type RoleKey,
   type ServerMessage,
   type TerminalAlert,
+  type Lang,
 } from '../shared/types.ts';
+import { applyLang, getLang, translate } from './i18n.ts';
 import { ShellDock } from './shell.ts';
 import { DEFAULT_THEME, DESKS, Scene, paintCharacter, stressColor, type Stress, type Theme } from './scene.ts';
 
@@ -117,6 +119,7 @@ function receive(msg: ServerMessage) {
   switch (msg.type) {
     case 'snapshot':
       shell.clear();
+      if (msg.lang !== getLang()) setLang(msg.lang);
       state.agents = msg.agents;
       state.log = msg.log;
       state.permissions = msg.permissions;
@@ -220,6 +223,11 @@ function receive(msg: ServerMessage) {
       if ($<HTMLDialogElement>('settings').open) renderSettings();
       renderDesk();
       break;
+    case 'language':
+      // Reloading starts the page from its Portuguese source, then translates if needed.
+      setLang(msg.lang);
+      location.reload();
+      break;
     case 'auto-switch':
       state.autoSwitch = msg.enabled;
       renderUsage();
@@ -235,6 +243,32 @@ function receive(msg: ServerMessage) {
       toast(msg.text);
       break;
   }
+}
+
+/* ---------- Language ---------- */
+
+const LANG_KEY = 'virtualof.idioma';
+
+function setLang(lang: Lang) {
+  try {
+    localStorage.setItem(LANG_KEY, lang);
+  } catch {
+    // Without storage the page shows Portuguese until the office says otherwise.
+  }
+  applyLang(lang);
+}
+
+// Translate before the first paint when this computer already chose English.
+try {
+  if (localStorage.getItem(LANG_KEY) === 'en') applyLang('en');
+} catch {
+  // Same as above.
+}
+
+for (const radio of document.querySelectorAll<HTMLInputElement>('input[name="idioma"]')) {
+  radio.addEventListener('change', () => {
+    if (radio.checked) send({ type: 'language', lang: radio.value as Lang });
+  });
 }
 
 /* ---------- Desktop notifications (only while the tab is in the background) ---------- */
@@ -316,19 +350,23 @@ function renderStress(agent: AgentView) {
   bar.setAttribute('aria-valuenow', String(exact ? percent : lit * 10));
   bar.setAttribute('aria-label', `Estresse de ${agent.name}: ${label.textContent}`);
 
-  const parts: string[] = [ACCOUNT_NAMES[account]];
-  if (quota.window) parts.push(`limite de ${quota.window}`);
-  if (quota.resetsAt) parts.push(`${quota.status === 'limited' ? 'volta' : 'renova'} ${clock(quota.resetsAt)}`);
+  // Built from pieces, so each piece is translated on its own.
+  const parts: string[] = [translate(ACCOUNT_NAMES[account])];
+  if (quota.window) parts.push(translate(`limite de ${quota.window}`));
+  if (quota.resetsAt) parts.push(translate(`${quota.status === 'limited' ? 'volta' : 'renova'} ${clock(quota.resetsAt)}`));
   const sharing = state.agents.filter((a) => a.id !== agent.id && accountOf(a) === account).map((a) => a.name);
-  let detail = parts.join(' · ') + '.';
-  if (sharing.length) detail += ` Divide esse limite com ${sharing.join(', ')}.`;
+  const sentences = [parts.join(' · ') + '.'];
+  if (sharing.length) sentences.push(translate(`Divide esse limite com ${sharing.join(', ')}.`));
   if (!exact && stress.level !== 'esgotado') {
-    detail +=
-      account === 'claude'
-        ? ' O Claude só informa a porcentagem quando o uso fica alto.'
-        : ' O Codex só avisa quando bate o limite.';
+    sentences.push(
+      translate(
+        account === 'claude'
+          ? 'O Claude só informa a porcentagem quando o uso fica alto.'
+          : `O ${account === 'codex' ? 'Codex' : 'Gemini'} só avisa quando bate o limite.`,
+      ),
+    );
   }
-  $('stress-detail').textContent = detail;
+  $('stress-detail').textContent = sentences.join(' ');
 }
 
 /** A small ten-block stress meter for the team cards. */
@@ -755,6 +793,7 @@ function openSettings() {
       model: agent.model ?? '',
     }));
   $<HTMLInputElement>('auto-switch').checked = state.autoSwitch;
+  for (const radio of document.querySelectorAll<HTMLInputElement>('input[name="idioma"]')) radio.checked = radio.value === getLang();
   renderSettings();
   $<HTMLDialogElement>('settings').showModal();
 }
@@ -782,7 +821,7 @@ function renderSettings() {
       nickname.maxLength = 24;
       nickname.setAttribute('aria-label', `Apelido de ${entry.agent.defaultName}`);
       nickname.addEventListener('input', () => (entry.nickname = nickname.value));
-      info.append(nickname, el('span', 'card__role', `${entry.agent.defaultName} · ${ENGINE_NAMES[entry.agent.kind]}`));
+      info.append(nickname, el('span', 'card__role', `${entry.agent.defaultName} · ${translate(ENGINE_NAMES[entry.agent.kind])}`));
       if (entry.agent.kind === 'codex' && entry.role === 'executor') {
         info.append(el('span', 'member__warn', 'Como executor, o Codex edita arquivos sem post-it de permissão.'));
       }

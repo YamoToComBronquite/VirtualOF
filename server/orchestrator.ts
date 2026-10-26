@@ -102,6 +102,7 @@ export class Orchestrator {
 
       const position = this.plan.steps.indexOf(step) + 1;
       const prompt = `Comando geral do usuário: "${command}"\n\nSua parte (passo ${position} de ${this.plan.steps.length}): ${step.task}`;
+      let since = this.office.lastLogId;
       let outcome: RunOutcome = { ok: false, text: '', limited: this.office.isLimited(this.team.account(member)) };
       if (!outcome.limited) outcome = await this.team.runAs(member, role, prompt, cwd);
       while (outcome.limited && this.office.autoSwitch && !this.stopped) {
@@ -110,8 +111,10 @@ export class Orchestrator {
         this.handover(member, cover, `o passo ${position}`);
         step.agentId = cover.config.id;
         this.publish();
+        const note = this.team.handoverNote(member, prompt, since, outcome.text);
         member = cover;
-        outcome = await this.team.runAs(member, role, prompt, cwd);
+        since = this.office.lastLogId;
+        outcome = await this.team.runAs(member, role, note, cwd);
       }
       if (this.stopped) return;
       if (outcome.limited) return this.finish('error', this.outOfLimits());

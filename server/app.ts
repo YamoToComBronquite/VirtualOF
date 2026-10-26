@@ -12,7 +12,8 @@ import { Office } from './office.ts';
 import { Orchestrator } from './orchestrator.ts';
 import { Shell } from './shell.ts';
 import { importSkill, listSkills, shareSkills } from './skills.ts';
-import { Team } from './team.ts';
+import type { RunOutcome } from './agents/runner.ts';
+import { Team, type Member } from './team.ts';
 
 const HOST = '127.0.0.1';
 
@@ -73,6 +74,39 @@ export async function startOffice(options: OfficeOptions) {
   mkdirSync(LOBBY, { recursive: true });
   const shell = new Shell((msg) => office.publish(msg), () => office.project);
 
+  /**
+   * A task typed straight to one agent. If its account hits the limit (before or during the task),
+   * another agent on a different account picks it up with a summary of what was already done.
+   */
+  async function runDirect(member: Member, prompt: string) {
+    // No project yet: chat from an empty folder, just to see the agent respond and its status.
+    const [cwd, note] = isFolder(office.project) ? [office.project, undefined] : [LOBBY, LOBBY_NOTE];
+    const role = member.config.papel === 'folga' || member.config.papel === 'coordenador' ? 'executor' : member.config.papel;
+    let current = member;
+    let task = prompt;
+    let since = office.lastLogId;
+    let outcome: RunOutcome = { ok: false, text: '', limited: office.isLimited(team.account(current)) };
+    if (!outcome.limited) outcome = await current.runner.run(task, cwd, note);
+    while (outcome.limited) {
+      const cover = office.autoSwitch ? team.substitute(current) : null;
+      if (!cover) {
+        office.notice(
+          office.autoSwitch
+            ? `${team.label(current)} bateu o limite de uso e ninguém de outra conta está livre agora. Veja em Consumo quando volta.`
+            : `${team.label(current)} bateu o limite de uso. A troca automática está desligada (Ajustes).`,
+        );
+        return;
+      }
+      const text = `${team.label(current)} bateu o limite de uso. ${team.label(cover)} assumiu a tarefa e continua de onde parou.`;
+      office.write(cover.config.id, 'permission', text);
+      office.notice(text);
+      task = team.handoverNote(current, task, since, outcome.text);
+      current = cover;
+      since = office.lastLogId;
+      outcome = await team.runAs(current, role, task, cwd, note);
+    }
+  }
+
   function handle(msg: ClientMessage) {
     switch (msg.type) {
       case 'task': {
@@ -80,21 +114,10 @@ export async function startOffice(options: OfficeOptions) {
         const runner = member?.runner;
         const prompt = msg.prompt.trim();
         if (!member || !runner || !prompt) return;
-        if (office.isLimited(team.account(member))) {
-          const cover = team.substitute(member);
-          return office.notice(
-            `${team.label(member)} está sem limite de uso agora (veja em Consumo).` + (cover ? ` ${team.label(cover)} está livre para essa tarefa.` : ''),
-          );
-        }
         if (orchestrator.running) return office.notice('Tem um comando geral em andamento. Pare o plano para falar direto com um agente.');
         if (runner.busy) return office.notice('Esse agente ainda está numa tarefa. Espere terminar ou clique em Parar.');
         office.write(member.config.id, 'user', prompt);
-        if (isFolder(office.project)) {
-          void runner.run(prompt, office.project);
-        } else {
-          // No project yet: chat from an empty folder, just to see the agent respond and its status.
-          void runner.run(prompt, LOBBY, LOBBY_NOTE);
-        }
+        void runDirect(member, prompt);
         return;
       }
       case 'stop':

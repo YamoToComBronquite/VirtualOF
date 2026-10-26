@@ -6,6 +6,9 @@ import type { Runner } from './agents/runner.ts';
 import { saveTeam, type AgentConfig, type OfficeConfig } from './config.ts';
 import type { Office } from './office.ts';
 
+/** Accounts with a free tier: Gemini through the Antigravity CLI. */
+const FREE_ACCOUNTS: Account[] = ['antigravity'];
+
 export interface Member {
   config: AgentConfig;
   runner: Runner;
@@ -90,16 +93,41 @@ export class Team {
     const free = this.members.filter(
       (m) => m !== member && !m.runner.busy && this.account(m) !== this.account(member) && !this.office.isLimited(this.account(m)),
     );
+    // Free accounts cover first, so a limit does not start spending on another paid plan.
+    const cost = (m: Member) => (FREE_ACCOUNTS.includes(this.account(m)) ? 0 : 1);
     const rank = (m: Member) =>
       m.config.papel === member.config.papel ? 0 : m.config.papel === 'executor' || m.config.papel === 'revisor' ? 1 : m.config.papel === 'folga' ? 2 : 3;
-    return free.sort((a, b) => rank(a) - rank(b))[0] ?? null;
+    return free.sort((a, b) => cost(a) - cost(b) || rank(a) - rank(b))[0] ?? null;
+  }
+
+  /**
+   * The note a stand-in gets when it takes over a task mid-way: the original task, what the
+   * agent that hit its limit already did, and where it stopped, so the work carries on.
+   */
+  handoverNote(from: Member, task: string, sinceLogId: number, partial: string) {
+    const done = this.office
+      .entriesSince(from.config.id, sinceLogId)
+      .filter((e) => e.kind === 'tool' || e.kind === 'text')
+      .slice(-40)
+      .map((e) => `- ${e.kind === 'text' ? 'disse: ' : ''}${e.text.replace(/\s+/g, ' ').slice(0, 220)}`);
+    return [
+      `[Passagem de bastão] ${this.label(from)} bateu o limite de uso no meio desta tarefa e você assumiu.`,
+      'Continue de onde parou. Não refaça o que já foi feito: o trabalho anterior já está salvo nos arquivos do projeto, então confira o estado atual antes de seguir.',
+      '',
+      'Tarefa original:',
+      task,
+      '',
+      `O que ${this.label(from)} já fez:`,
+      done.length ? done.join('\n') : '- nada registrado ainda',
+      ...(partial.trim() ? ['', 'Última resposta antes de parar:', partial.trim().slice(0, 1500)] : []),
+    ].join('\n');
   }
 
   /** Runs a task with the agent temporarily playing `role` (when it covers for someone). */
-  async runAs(member: Member, role: RoleKey, prompt: string, cwd: string) {
+  async runAs(member: Member, role: RoleKey, prompt: string, cwd: string, note?: string) {
     this.overrides.set(member.config.id, role);
     try {
-      return await member.runner.run(prompt, cwd);
+      return await member.runner.run(prompt, cwd, note);
     } finally {
       this.overrides.delete(member.config.id);
     }

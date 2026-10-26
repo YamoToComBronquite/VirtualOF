@@ -19,6 +19,11 @@
   box-sizing: border-box;
 }
 
+/* Components set their own display; hidden must still win. */
+[hidden] {
+  display: none !important;
+}
+
 body {
   margin: 0;
   height: 100vh;
@@ -506,6 +511,59 @@ select {
   margin: 0;
   color: var(--muted);
   overflow-wrap: anywhere;
+}
+
+/* Stress: how close the selected agent's account is to its limit */
+
+.stress {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.stress__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font: 13px var(--pixel);
+}
+
+.stress__head strong {
+  font-weight: 400;
+}
+
+.stress__head strong[data-level='calmo'] {
+  color: var(--ok);
+}
+
+.stress__head strong[data-level='apertado'] {
+  color: var(--note);
+}
+
+.stress__head strong[data-level='esgotado'] {
+  color: var(--bad);
+}
+
+.stress__head strong[data-level='sem-dados'] {
+  color: var(--muted);
+}
+
+/* Ten square blocks, like a health bar in a game */
+.stress__bar {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 3px;
+  padding: 3px;
+  border: 2px solid #120f1c;
+  background: #120f1c;
+}
+
+.stress__bar span {
+  height: 12px;
+  background: #3a3150;
 }
 
 /* Usage: limits per account, spend per agent */

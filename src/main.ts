@@ -16,7 +16,7 @@ import {
   type ServerMessage,
   type TerminalAlert,
 } from '../shared/types.ts';
-import { DESKS, Scene, paintCharacter, stressColor, type Stress } from './scene.ts';
+import { DEFAULT_THEME, DESKS, Scene, paintCharacter, stressColor, type Stress, type Theme } from './scene.ts';
 
 const STATUS_TEXT: Record<AgentStatus, string> = {
   idle: 'livre',
@@ -766,6 +766,137 @@ $('settings').addEventListener('close', () => {
     });
   }
 });
+
+/* ---------- Ambiente: how the room looks, kept in this browser ---------- */
+
+const THEME_KEY = 'virtualof.ambiente';
+const VIEW_KEY = 'virtualof.vista';
+
+// Storage can be missing or blocked (private window, cleared data); the room then uses defaults.
+function readStored(key: string) {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeStored(key: string, value: string | null) {
+  try {
+    if (value === null) localStorage.removeItem(key);
+    else localStorage.setItem(key, value);
+  } catch {
+    // Not saved; the choice still applies until the page reloads.
+  }
+}
+
+function loadTheme(): Theme {
+  try {
+    return { ...DEFAULT_THEME, ...(JSON.parse(readStored(THEME_KEY) ?? '{}') as Partial<Theme>) };
+  } catch {
+    return { ...DEFAULT_THEME };
+  }
+}
+
+function applyView(dataUrl: string | null) {
+  if (!dataUrl) {
+    scene.view = undefined;
+    $('view-state').textContent = 'Mostrando a cidade.';
+    return;
+  }
+  const image = new Image();
+  image.onload = () => (scene.view = image);
+  image.src = dataUrl;
+  $('view-state').textContent = 'Mostrando a sua imagem, em pixel art.';
+}
+
+/** Crops the picture to the window's shape and shrinks it to the window's 120×34 pixels. */
+function shrinkToWindow(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      const canvas = el('canvas');
+      canvas.width = 120;
+      canvas.height = 34;
+      const ctx = canvas.getContext('2d')!;
+      const scale = Math.max(120 / image.width, 34 / image.height);
+      const w = 120 / scale;
+      const h = 34 / scale;
+      ctx.drawImage(image, (image.width - w) / 2, (image.height - h) / 2, w, h, 0, 0, 120, 34);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL('image/png'));
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Não consegui abrir essa imagem.'));
+    };
+    image.src = url;
+  });
+}
+
+function fillAmbienteForm(theme: Theme) {
+  const form = $<HTMLFormElement>('ambiente-form');
+  for (const key of ['periodo', 'parede', 'piso'] as const) {
+    form.querySelector<HTMLInputElement>(`input[name="${key}"][value="${theme[key]}"]`)!.checked = true;
+  }
+  for (const key of ['gato', 'tapete', 'plantas', 'extras'] as const) {
+    form.querySelector<HTMLInputElement>(`input[name="${key}"]`)!.checked = theme[key];
+  }
+}
+
+function setTheme(theme: Theme) {
+  scene.theme = theme;
+  writeStored(THEME_KEY, JSON.stringify(theme));
+}
+
+$('ambiente-form').addEventListener('change', (event) => {
+  if ((event.target as HTMLElement).id === 'view-file') return;
+  const data = new FormData($<HTMLFormElement>('ambiente-form'));
+  setTheme({
+    periodo: data.get('periodo') as Theme['periodo'],
+    parede: data.get('parede') as Theme['parede'],
+    piso: data.get('piso') as Theme['piso'],
+    gato: data.has('gato'),
+    tapete: data.has('tapete'),
+    plantas: data.has('plantas'),
+    extras: data.has('extras'),
+  });
+});
+
+$('view-file').addEventListener('change', async (event) => {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = '';
+  if (!file) return;
+  try {
+    const dataUrl = await shrinkToWindow(file);
+    writeStored(VIEW_KEY, dataUrl);
+    applyView(dataUrl);
+  } catch (error) {
+    $('view-state').textContent = error instanceof Error ? error.message : String(error);
+  }
+});
+
+$('view-reset').addEventListener('click', () => {
+  writeStored(VIEW_KEY, null);
+  applyView(null);
+});
+
+$('ambiente-reset').addEventListener('click', () => {
+  setTheme({ ...DEFAULT_THEME });
+  fillAmbienteForm(DEFAULT_THEME);
+  writeStored(VIEW_KEY, null);
+  applyView(null);
+});
+
+$('open-ambiente').addEventListener('click', () => {
+  fillAmbienteForm(scene.theme);
+  $<HTMLDialogElement>('ambiente').showModal();
+});
+
+scene.theme = loadTheme();
+applyView(readStored(VIEW_KEY));
 
 /* ---------- Skills: see what is installed and import new ones ---------- */
 

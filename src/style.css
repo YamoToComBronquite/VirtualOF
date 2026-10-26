@@ -529,6 +529,89 @@ select {
   overflow-wrap: anywhere;
 }
 
+/* Ambiente dialog: sits beside the office without dimming it, so changes are visible */
+
+.settings--side {
+  width: min(340px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  margin: 16px 396px auto auto;
+  overflow-y: auto;
+}
+
+.settings--side::backdrop {
+  background: transparent;
+}
+
+.choice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 14px;
+  padding: 0;
+  border: 0;
+}
+
+.choice legend {
+  margin-bottom: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.choice label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px var(--line);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.choice label:has(input:checked) {
+  background: var(--plum-raised);
+  box-shadow: inset 0 0 0 1px var(--lamp);
+}
+
+.choice input[type='radio'] {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.choice label:has(input[type='radio']:focus-visible) {
+  outline: 2px solid var(--lamp);
+  outline-offset: 2px;
+}
+
+.choice--view {
+  align-items: center;
+}
+
+.choice--view .pick {
+  padding: 0;
+  box-shadow: none;
+}
+
+.choice--view .hint {
+  flex-basis: 100%;
+}
+
+.swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  background: var(--c);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.25);
+}
+
+@media (max-width: 860px) {
+  .settings--side {
+    margin: auto;
+  }
+}
+
 /* Skills dialog */
 
 .skills__installed {

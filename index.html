@@ -22,6 +22,7 @@
       <header class="panel__head">
         <h1>Turno da Noite</h1>
         <span id="connection" class="connection">conectando…</span>
+        <button type="button" id="open-ambiente" class="ghost small">Ambiente</button>
         <button type="button" id="open-skills" class="ghost small">Skills</button>
         <button type="button" id="open-settings" class="ghost small">Configurações</button>
       </header>
@@ -140,6 +141,58 @@
         <div class="settings__actions">
           <button type="submit" value="save">Salvar equipe</button>
           <button type="submit" value="cancel" class="ghost" formnovalidate>Cancelar</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="ambiente" class="settings settings--side" aria-labelledby="ambiente-title">
+      <form method="dialog" id="ambiente-form">
+        <h2 id="ambiente-title">Ambiente</h2>
+        <p class="hint">As mudanças aparecem na hora no escritório e ficam salvas neste computador.</p>
+
+        <fieldset class="choice">
+          <legend>Período do dia</legend>
+          <label><input type="radio" name="periodo" value="noite" /> Noite</label>
+          <label><input type="radio" name="periodo" value="entardecer" /> Entardecer</label>
+          <label><input type="radio" name="periodo" value="dia" /> Dia</label>
+        </fieldset>
+
+        <fieldset class="choice">
+          <legend>Parede</legend>
+          <label><input type="radio" name="parede" value="ameixa" /><i class="swatch" style="--c: #2e2645"></i> Ameixa</label>
+          <label><input type="radio" name="parede" value="floresta" /><i class="swatch" style="--c: #22382f"></i> Floresta</label>
+          <label><input type="radio" name="parede" value="terracota" /><i class="swatch" style="--c: #4a2c26"></i> Terracota</label>
+          <label><input type="radio" name="parede" value="grafite" /><i class="swatch" style="--c: #2b2d33"></i> Grafite</label>
+        </fieldset>
+
+        <fieldset class="choice">
+          <legend>Piso</legend>
+          <label><input type="radio" name="piso" value="madeira" /> Madeira</label>
+          <label><input type="radio" name="piso" value="carpete" /> Carpete</label>
+          <label><input type="radio" name="piso" value="xadrez" /> Ladrilho xadrez</label>
+        </fieldset>
+
+        <fieldset class="choice">
+          <legend>Mostrar</legend>
+          <label><input type="checkbox" name="gato" /> Gato na janela</label>
+          <label><input type="checkbox" name="tapete" /> Tapete</label>
+          <label><input type="checkbox" name="plantas" /> Plantas</label>
+          <label><input type="checkbox" name="extras" /> Cafeteira e rack</label>
+        </fieldset>
+
+        <fieldset class="choice choice--view">
+          <legend>Vista da janela</legend>
+          <label class="pick">
+            <input type="file" id="view-file" accept="image/*" class="visually-hidden" />
+            <span>Usar uma imagem minha</span>
+          </label>
+          <button type="button" id="view-reset" class="ghost">Voltar para a cidade</button>
+          <p id="view-state" class="hint"></p>
+        </fieldset>
+
+        <div class="settings__actions">
+          <button type="submit" value="close">Pronto</button>
+          <button type="button" id="ambiente-reset" class="ghost">Restaurar padrão</button>
         </div>
       </form>
     </dialog>

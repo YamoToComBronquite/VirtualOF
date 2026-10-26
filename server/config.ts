@@ -2,7 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { RoleKey } from '../shared/types.ts';
+import type { Lang, RoleKey } from '../shared/types.ts';
 
 export interface AgentConfig {
   id: string;
@@ -26,6 +26,7 @@ export interface OfficeConfig {
   antigravity: { pasta: string; ativoSegundos: number; maximo: number };
   /** Hand work to an agent on another account when one hits its limit (default on). */
   trocaAutomatica?: boolean;
+  idioma?: Lang;
 }
 
 /** What the user changed in the page; kept out of version control. */
@@ -34,6 +35,7 @@ interface LocalSettings {
   trocaAutomatica?: boolean;
   /** Team order, roles, nicknames and models, as chosen in Configurações. */
   equipe?: SavedMember[];
+  idioma?: Lang;
 }
 
 const CONFIG_PATH = fileURLToPath(new URL('../escritorio.config.json', import.meta.url));
@@ -55,6 +57,7 @@ export function loadConfig(): OfficeConfig {
   const local = readLocal();
   if (local.projeto !== undefined) config.projeto = local.projeto;
   if (local.trocaAutomatica !== undefined) config.trocaAutomatica = local.trocaAutomatica;
+  if (local.idioma) config.idioma = local.idioma;
   if (local.equipe) {
     const byId = new Map(config.agentes.map((a) => [a.id, a]));
     const ordered = local.equipe.flatMap(({ id, ...saved }) => {
@@ -71,6 +74,10 @@ export function loadConfig(): OfficeConfig {
 /** Remembers the chosen project folder for the next start. */
 export function saveProject(project: string) {
   writeLocal({ projeto: project });
+}
+
+export function saveLanguage(lang: Lang) {
+  writeLocal({ idioma: lang });
 }
 
 export function saveTeam(team: SavedMember[], autoSwitch: boolean) {

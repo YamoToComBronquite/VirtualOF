@@ -6,7 +6,7 @@ import { extname, isAbsolute, join, normalize, resolve, sep } from 'node:path';
 import { WebSocketServer, type WebSocket } from 'ws';
 import type { ClientMessage, ServerMessage } from '../shared/types.ts';
 import { watchAntigravity } from './agents/antigravity.ts';
-import { loadConfig, saveProject } from './config.ts';
+import { loadConfig, saveLanguage, saveProject } from './config.ts';
 import { loadModels } from './models.ts';
 import { Office } from './office.ts';
 import { Orchestrator } from './orchestrator.ts';
@@ -67,6 +67,7 @@ export async function startOffice(options: OfficeOptions) {
   const config = loadConfig();
   const office = new Office(config.projeto);
   office.autoSwitch = config.trocaAutomatica ?? true;
+  office.lang = config.idioma ?? 'pt';
   office.models = await loadModels((models) => office.setModels(models));
   const team = new Team(config, office);
   const orchestrator = new Orchestrator(office, team);
@@ -131,6 +132,12 @@ export async function startOffice(options: OfficeOptions) {
         void orchestrator.start(prompt, office.project);
         return;
       }
+      case 'language':
+        if (msg.lang !== 'pt' && msg.lang !== 'en') return;
+        office.lang = msg.lang;
+        saveLanguage(msg.lang);
+        office.publish({ type: 'language', lang: msg.lang });
+        return;
       case 'stop-plan':
         orchestrator.stop();
         return;

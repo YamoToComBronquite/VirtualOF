@@ -50,6 +50,7 @@ export function watchAntigravity(settings: OfficeConfig['antigravity'], office: 
         office.addAgent({
           id,
           name: `Antigravity ${shown.size}`,
+          defaultName: `Antigravity ${shown.size}`,
           kind: 'antigravity',
           role: 'Só acompanhamento',
           color: COLOR,

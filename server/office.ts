@@ -5,6 +5,7 @@ import type {
   AgentView,
   LogEntry,
   LogKind,
+  ModelCatalog,
   PermissionRequest,
   Plan,
   Quota,
@@ -53,6 +54,8 @@ export class Office {
   };
   /** Hand a step to another agent when its account hits the limit. */
   autoSwitch = true;
+  /** Models each engine offers, for Configurações. */
+  models: ModelCatalog = { claude: [], codex: [], antigravity: [] };
   private nextLogId = 1;
   private listeners = new Set<(msg: ServerMessage) => void>();
   project: string;
@@ -76,6 +79,7 @@ export class Office {
       plan: this.plan,
       quota: this.quota,
       autoSwitch: this.autoSwitch,
+      models: this.models,
       project: this.project,
     };
   }
@@ -140,6 +144,11 @@ export class Office {
       return false;
     }
     return true;
+  }
+
+  setModels(models: ModelCatalog) {
+    this.models = models;
+    this.emit({ type: 'models', models });
   }
 
   setAutoSwitch(enabled: boolean) {

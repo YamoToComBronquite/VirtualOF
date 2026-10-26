@@ -18,5 +18,5 @@ export interface Runner {
   reset(): void;
 }
 
-/** The agent's current role and its instructions, read at the start of every task. */
-export type RoleBrief = () => { key: RoleKey; instructions: string };
+/** The agent's current role, its instructions and chosen model, read at the start of every task. */
+export type RoleBrief = () => { key: RoleKey; instructions: string; model: string };

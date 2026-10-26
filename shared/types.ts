@@ -26,7 +26,12 @@ export interface AgentUsage {
 
 export interface AgentView {
   id: string;
+  /** Nickname when the user gave one, otherwise the configured name. */
   name: string;
+  /** The configured name, shown as a hint under a nickname. */
+  defaultName: string;
+  /** Model chosen in Configurações; empty means the engine's own default. */
+  model?: string;
   kind: AgentKind;
   /** Display name of the role, e.g. "Executor". */
   role: string;
@@ -58,6 +63,23 @@ export interface PermissionRequest {
   agentId: string;
   tool: string;
   summary: string;
+}
+
+export interface ModelOption {
+  /** What the engine expects, e.g. "claude-sonnet-5-5"; empty for the engine's default. */
+  id: string;
+  label: string;
+}
+
+/** Models each engine can run, offered in Configurações. */
+export type ModelCatalog = Record<AgentKind, ModelOption[]>;
+
+/** One agent's settings as saved from Configurações. */
+export interface MemberSettings {
+  id: string;
+  role: RoleKey;
+  nickname: string;
+  model: string;
 }
 
 /** Agents bill to an account: both Claude agents share one, Codex uses the ChatGPT one. */
@@ -101,8 +123,10 @@ export type ServerMessage =
       plan: Plan | null;
       quota: Record<Account, Quota>;
       autoSwitch: boolean;
+      models: ModelCatalog;
       project: string;
     }
+  | { type: 'models'; models: ModelCatalog }
   | { type: 'quota'; quota: Record<Account, Quota> }
   | { type: 'auto-switch'; enabled: boolean }
   | { type: 'plan'; plan: Plan | null }
@@ -130,6 +154,6 @@ export type ClientMessage =
   | { type: 'permission'; id: string; allow: boolean }
   | { type: 'terminal-done'; id: string }
   | { type: 'command'; prompt: string }
-  | { type: 'team'; team: { id: string; role: RoleKey }[]; autoSwitch: boolean }
+  | { type: 'team'; team: MemberSettings[]; autoSwitch: boolean }
   | { type: 'stop-plan' }
   | { type: 'project'; path: string };

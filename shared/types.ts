@@ -176,6 +176,7 @@ export type ClientMessage =
   | { type: 'shell-run'; command: string }
   | { type: 'shell-resize'; cols: number; rows: number }
   | { type: 'shell-restart' }
+  | { type: 'shell-kill' }
   | { type: 'command'; prompt: string }
   | { type: 'team'; team: MemberSettings[]; autoSwitch: boolean }
   | { type: 'list-skills' }

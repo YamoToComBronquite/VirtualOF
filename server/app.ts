@@ -143,6 +143,9 @@ export async function startOffice(options: OfficeOptions) {
       case 'shell-restart':
         shell.restart();
         return;
+      case 'shell-kill':
+        shell.close();
+        return;
       case 'project': {
         const path = resolve(msg.path.trim());
         if (!isFolder(path)) return office.notice(`Essa pasta não existe: ${msg.path}`);

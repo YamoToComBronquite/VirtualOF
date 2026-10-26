@@ -1,5 +1,19 @@
-import type { AgentStatus, AgentView, ClientMessage, LogEntry, PermissionRequest, ServerMessage, TerminalAlert } from '../shared/types.ts';
-import { DESKS, Scene } from './scene.ts';
+import {
+  ROLE_NAMES,
+  type Account,
+  type Quota,
+  type AgentStatus,
+  type AgentView,
+  type ClientMessage,
+  type LogEntry,
+  type PermissionRequest,
+  type Plan,
+  type PlanStepStatus,
+  type RoleKey,
+  type ServerMessage,
+  type TerminalAlert,
+} from '../shared/types.ts';
+import { DESKS, Scene, paintCharacter } from './scene.ts';
 
 const STATUS_TEXT: Record<AgentStatus, string> = {
   idle: 'livre',
@@ -12,6 +26,16 @@ const STATUS_TEXT: Record<AgentStatus, string> = {
   error: 'deu erro',
 };
 
+const STEP_TEXT: Record<PlanStepStatus, string> = {
+  pending: 'na fila',
+  running: 'fazendo',
+  done: 'feito',
+  error: 'falhou',
+  skipped: 'pulado',
+};
+
+const BUSY: AgentStatus[] = ['thinking', 'reading', 'writing', 'running', 'waiting'];
+
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
 const state = {
@@ -19,6 +43,9 @@ const state = {
   log: [] as LogEntry[],
   permissions: [] as PermissionRequest[],
   terminal: [] as TerminalAlert[],
+  plan: null as Plan | null,
+  quota: { claude: { status: 'unknown' }, codex: { status: 'unknown' } } as Record<Account, Quota>,
+  autoSwitch: true,
   project: '',
   selectedId: undefined as string | undefined,
 };
@@ -30,8 +57,30 @@ function send(msg: ClientMessage) {
   socket?.send(JSON.stringify(msg));
 }
 
+function agentById(id: string) {
+  return state.agents.find((a) => a.id === id);
+}
+
 function agentName(id: string) {
-  return state.agents.find((a) => a.id === id)?.name ?? id;
+  return agentById(id)?.name ?? id;
+}
+
+function el<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, text?: string) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+/** Head-and-shoulders pixel portrait, the same character that sits at the desk. */
+function portrait(agent: AgentView) {
+  const canvas = el('canvas', 'portrait');
+  canvas.width = 20;
+  canvas.height = 18;
+  const ctx = canvas.getContext('2d');
+  if (ctx) paintCharacter(ctx, agent, 2, 3);
+  canvas.setAttribute('aria-hidden', 'true');
+  return canvas;
 }
 
 /* ---------- Connection ---------- */
@@ -46,7 +95,7 @@ function connect() {
   };
   ws.onclose = () => {
     socket = undefined;
-    badge.textContent = 'desconectado, tentando de novo…';
+    badge.textContent = 'desconectado';
     badge.classList.remove('is-on');
     setTimeout(connect, 2000);
   };
@@ -60,8 +109,11 @@ function receive(msg: ServerMessage) {
       state.log = msg.log;
       state.permissions = msg.permissions;
       state.terminal = msg.terminal;
+      state.plan = msg.plan;
+      state.quota = msg.quota;
+      state.autoSwitch = msg.autoSwitch;
       state.project = msg.project;
-      state.selectedId ??= msg.agents[0]?.id;
+      if (!state.selectedId || !agentById(state.selectedId)) state.selectedId = msg.agents[0]?.id;
       scene.doneCount = msg.log.filter((e) => e.kind === 'result').length;
       $<HTMLInputElement>('project').value = msg.project;
       renderAll();
@@ -74,10 +126,12 @@ function receive(msg: ServerMessage) {
       else state.agents.push(msg.agent);
       if (msg.agent.status === 'done' && previous !== 'done') {
         scene.markFinished(msg.agent.id);
-        notify(`${msg.agent.name} terminou`, msg.agent.activity);
+        if (!state.plan || state.plan.status !== 'running') notify(`${msg.agent.name} terminou`, msg.agent.activity);
       }
       renderTeam();
       renderDesk();
+      renderCommand();
+      renderUsage();
       break;
     }
     case 'agent-removed':
@@ -109,6 +163,24 @@ function receive(msg: ServerMessage) {
       state.terminal = state.terminal.filter((t) => t.id !== msg.id);
       renderTerminal();
       break;
+    case 'plan': {
+      const was = state.plan?.status;
+      state.plan = msg.plan;
+      renderCommand();
+      if (msg.plan && was !== msg.plan.status && (msg.plan.status === 'done' || msg.plan.status === 'error')) {
+        notify(msg.plan.status === 'done' ? 'Comando geral concluído' : 'O comando geral parou', msg.plan.summary ?? '');
+      }
+      break;
+    }
+    case 'quota':
+      state.quota = msg.quota;
+      renderUsage();
+      renderTeam();
+      break;
+    case 'auto-switch':
+      state.autoSwitch = msg.enabled;
+      renderUsage();
+      break;
     case 'project':
       state.project = msg.project;
       $<HTMLInputElement>('project').value = msg.project;
@@ -138,8 +210,10 @@ document.addEventListener(
 /* ---------- Rendering ---------- */
 
 function renderAll() {
+  renderUsage();
   renderTeam();
   renderDesk();
+  renderCommand();
   renderTerminal();
   renderNotes();
   renderLog();
@@ -148,99 +222,248 @@ function renderAll() {
 function renderTeam() {
   scene.agents = state.agents.slice(0, DESKS.length);
   scene.selectedId = state.selectedId;
-  const list = $('team');
-  list.replaceChildren(
+  $('team').replaceChildren(
     ...state.agents.map((agent) => {
-      const li = document.createElement('li');
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.setAttribute('aria-pressed', String(agent.id === state.selectedId));
-      button.addEventListener('click', () => select(agent.id));
+      const li = el('li');
+      const card = el('button', 'card');
+      card.type = 'button';
+      card.dataset.status = agent.status;
+      card.setAttribute('aria-pressed', String(agent.id === state.selectedId));
+      card.addEventListener('click', () => select(agent.id));
 
-      const swatch = document.createElement('span');
-      swatch.className = 'team__swatch';
-      swatch.style.background = agent.color;
+      const frame = el('span', 'card__portrait');
+      frame.style.setProperty('--agent', agent.color);
+      frame.append(portrait(agent));
 
-      const name = document.createElement('span');
-      name.className = 'team__name';
-      name.textContent = agent.name;
-      const role = document.createElement('span');
-      role.className = 'team__role';
-      role.textContent = agent.role;
-      name.append(role);
+      const body = el('span', 'card__body');
+      const top = el('span', 'card__top');
+      top.append(el('span', 'card__name', agent.name), el('span', 'card__role', agent.role));
+      body.append(top, el('span', 'card__activity', agent.activity));
 
-      const status = document.createElement('span');
-      status.className = 'team__status';
-      status.dataset.status = agent.status;
-      status.textContent = STATUS_TEXT[agent.status];
+      const limited = accountOf(agent) && state.quota[accountOf(agent)!].status === 'limited';
+      const status = el('span', 'card__status', limited ? 'sem limite' : STATUS_TEXT[agent.status]);
+      status.dataset.status = limited ? 'error' : agent.status;
 
-      button.append(swatch, name, status);
-      li.append(button);
+      card.append(frame, body, status);
+      li.append(card);
       return li;
     }),
   );
 }
 
 function renderDesk() {
-  const agent = state.agents.find((a) => a.id === state.selectedId);
+  const agent = state.selectedId ? agentById(state.selectedId) : undefined;
   const desk = $('desk');
   desk.hidden = !agent;
   if (!agent) return;
-  $('desk-name').textContent = `${agent.name} · ${agent.role}`;
-  const usage =
-    agent.usage.inputTokens + agent.usage.outputTokens > 0
-      ? ` · ${formatTokens(agent.usage.inputTokens + agent.usage.outputTokens)} tokens` +
-        (agent.usage.costUsd ? ` (≈ US$ ${agent.usage.costUsd.toFixed(2)} se fosse API)` : '')
-      : '';
-  $('desk-activity').textContent = `${agent.activity}${usage}`;
+  $('desk-name').textContent = `Falar com ${agent.name}`;
+  const tokens = agent.usage.inputTokens + agent.usage.outputTokens;
+  $('desk-activity').textContent =
+    tokens > 0
+      ? `${formatTokens(tokens)} tokens nesta sessão` + (agent.usage.costUsd ? ` (≈ US$ ${agent.usage.costUsd.toFixed(2)} se fosse API)` : '')
+      : 'Ainda não trabalhou nesta sessão.';
+  renderToolkit(agent);
   $('task-form').hidden = !agent.controllable;
   $('watch-only').hidden = agent.controllable;
   $('task-label').textContent = `O que ${agent.name} deve fazer?`;
-  const busy = ['thinking', 'reading', 'writing', 'running', 'waiting'].includes(agent.status);
+  const busy = BUSY.includes(agent.status);
   $<HTMLButtonElement>('send').disabled = busy;
   $<HTMLButtonElement>('stop').disabled = !busy;
+}
+
+function accountOf(agent: AgentView): Account | undefined {
+  return agent.kind === 'antigravity' ? undefined : agent.kind;
+}
+
+const ACCOUNT_NAMES: Record<Account, string> = { claude: 'Conta do Claude', codex: 'Conta do ChatGPT (Codex)' };
+
+function clock(ms: number) {
+  const at = new Date(ms);
+  const sameDay = at.toDateString() === new Date().toDateString();
+  const time = at.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  return sameDay ? `às ${time}` : `${at.toLocaleDateString('pt-BR', { weekday: 'short' })} às ${time}`;
+}
+
+/** Subscription limits per account, then what each agent spent. */
+function renderUsage() {
+  $('quota').replaceChildren(
+    ...(Object.keys(ACCOUNT_NAMES) as Account[]).map((account) => {
+      const quota = state.quota[account];
+      const li = el('li', 'quota__row');
+      li.dataset.status = quota.status;
+      const head = el('div', 'quota__head');
+      const word: Record<Quota['status'], string> = {
+        unknown: 'sem dados ainda',
+        ok: 'dentro do limite',
+        warning: 'perto do limite',
+        limited: 'limite atingido',
+      };
+      head.append(el('span', 'quota__name', ACCOUNT_NAMES[account]), el('span', 'quota__state', word[quota.status]));
+      li.append(head);
+
+      if (quota.utilization !== undefined) {
+        const percent = Math.round(Math.min(1, quota.utilization) * 100);
+        const bar = el('div', 'quota__bar');
+        bar.setAttribute('role', 'meter');
+        bar.setAttribute('aria-valuenow', String(percent));
+        bar.setAttribute('aria-valuemin', '0');
+        bar.setAttribute('aria-valuemax', '100');
+        bar.setAttribute('aria-label', `${ACCOUNT_NAMES[account]}: ${percent}% usado`);
+        const fill = el('span');
+        fill.style.width = `${percent}%`;
+        bar.append(fill);
+        li.append(bar);
+      }
+
+      const details: string[] = [];
+      if (quota.utilization !== undefined) details.push(`${Math.round(quota.utilization * 100)}% usado`);
+      if (quota.window) details.push(`limite de ${quota.window}`);
+      if (quota.resetsAt) details.push(`${quota.status === 'limited' ? 'volta' : 'renova'} ${clock(quota.resetsAt)}`);
+      if (!details.length) {
+        details.push(
+          account === 'codex'
+            ? 'O Codex só avisa quando bate o limite.'
+            : 'Aparece quando um agente Claude trabalhar.',
+        );
+      }
+      li.append(el('p', 'quota__detail', details.join(' · ')));
+      return li;
+    }),
+  );
+
+  const rows = state.agents.filter((a) => a.controllable);
+  $('usage-rows').replaceChildren(
+    ...rows.map((agent) => {
+      const tr = el('tr');
+      const name = el('th');
+      name.scope = 'row';
+      const dot = el('span', 'usage__dot');
+      dot.style.background = agent.color;
+      name.append(dot, agent.name);
+      const tokens = agent.usage.inputTokens + agent.usage.outputTokens;
+      tr.append(
+        name,
+        el('td', undefined, String(agent.usage.tasks)),
+        el('td', undefined, tokens ? formatTokens(tokens) : '—'),
+        el('td', undefined, agent.usage.costUsd ? `US$ ${agent.usage.costUsd.toFixed(2)}` : '—'),
+      );
+      return tr;
+    }),
+  );
+
+  $('auto-switch-state').textContent = state.autoSwitch
+    ? 'Troca automática ligada: se uma conta bater o limite no meio de um comando geral, um agente de outra conta assume.'
+    : 'Troca automática desligada. Ligue em Configurações.';
+}
+
+/** Skills, plugins and MCP servers the agent loaded, so the user knows what it can use. */
+function renderToolkit(agent: AgentView) {
+  const list = $('desk-toolkit');
+  list.hidden = !agent.controllable;
+  if (!agent.controllable) return;
+  const kit = agent.toolkit;
+  if (!kit) {
+    list.replaceChildren(el('dd', 'hint', 'As skills, plugins e servidores MCP aparecem aqui depois da primeira tarefa.'));
+    return;
+  }
+  if (kit.note) {
+    list.replaceChildren(el('dd', 'hint', kit.note));
+    return;
+  }
+  const rows: [string, string[]][] = [
+    ['Skills', kit.skills],
+    ['Plugins', kit.plugins],
+    ['MCP', kit.mcp],
+  ];
+  list.replaceChildren(
+    ...rows.flatMap(([label, items]) => [el('dt', undefined, label), el('dd', undefined, items.length ? items.join(', ') : 'nenhum')]),
+  );
 }
 
 function formatTokens(n: number) {
   return n >= 1000 ? `${(n / 1000).toFixed(1).replace('.', ',')} mil` : String(n);
 }
 
+/** Plan steps the user expanded, kept open across re-renders. */
+const openSteps = new Set<number>();
+
+function renderCommand() {
+  const coordinator = state.agents.find((a) => a.roleKey === 'coordenador');
+  const workers = state.agents.filter((a) => a.roleKey === 'executor' || a.roleKey === 'revisor').map((a) => a.name);
+  $('command-hint').textContent = coordinator
+    ? `${coordinator.name} monta a ordem e passa cada parte para ${workers.join(', ') || 'a equipe'}.`
+    : 'Escolha um coordenador em Configurações.';
+
+  const plan = state.plan;
+  const running = plan?.status === 'planning' || plan?.status === 'running';
+  $<HTMLButtonElement>('send-command').disabled = running || !coordinator;
+  $('stop-plan').hidden = !running;
+
+  const box = $('plan');
+  box.hidden = !plan;
+  if (!plan) return;
+  const statusText: Record<Plan['status'], string> = {
+    planning: `${coordinator?.name ?? 'O coordenador'} está montando o plano…`,
+    running: 'Executando o plano',
+    done: 'Plano concluído',
+    stopped: 'Plano parado por você',
+    error: 'O plano parou com erro',
+  };
+  const status = $('plan-status');
+  status.textContent = statusText[plan.status];
+  status.dataset.status = plan.status;
+
+  $('plan-steps').replaceChildren(
+    ...plan.steps.map((step) => {
+      const agent = agentById(step.agentId);
+      const li = el('li', 'step');
+      li.dataset.status = step.status;
+      const who = el('span', 'step__who', agent?.name ?? step.agentId);
+      who.style.color = agent?.color ?? '';
+      // Coordinators write long, self-contained tasks; show two lines and open on click.
+      const task = el('p', 'step__task', step.task);
+      task.title = 'Clique para ver a tarefa inteira';
+      if (openSteps.has(step.id)) task.classList.add('is-open');
+      task.addEventListener('click', () => {
+        task.classList.toggle('is-open');
+        if (!openSteps.delete(step.id)) openSteps.add(step.id);
+      });
+      li.append(who, el('span', 'step__state', STEP_TEXT[step.status]), task);
+      return li;
+    }),
+  );
+  const summary = $('plan-summary');
+  summary.hidden = !plan.summary;
+  summary.textContent = plan.summary ?? '';
+}
+
 function renderTerminal() {
   $('terminal').replaceChildren(
     ...state.terminal.map((alert) => {
-      const li = document.createElement('li');
-      li.className = 'term';
-      const title = document.createElement('h3');
-      title.textContent = 'Abra o terminal';
-      const reason = document.createElement('p');
-      reason.textContent = `${agentName(alert.agentId)}: ${alert.reason}`;
-      const code = document.createElement('code');
-      code.textContent = alert.command;
-
-      const copy = document.createElement('button');
+      const li = el('li', 'term');
+      const copy = el('button', undefined, 'Copiar comando');
       copy.type = 'button';
-      copy.textContent = 'Copiar comando';
       copy.addEventListener('click', async () => {
         await navigator.clipboard.writeText(alert.command);
         copy.textContent = 'Copiado';
       });
-      const done = document.createElement('button');
+      const done = el('button', 'ghost', 'Já rodei');
       done.type = 'button';
-      done.className = 'ghost';
-      done.textContent = 'Já rodei';
       done.addEventListener('click', () => {
         send({ type: 'terminal-done', id: alert.id });
-        const agent = state.agents.find((a) => a.id === alert.agentId);
-        const idle = agent && !['thinking', 'reading', 'writing', 'running', 'waiting'].includes(agent.status);
-        if (agent?.controllable && idle) {
+        const agent = agentById(alert.agentId);
+        if (agent?.controllable && !BUSY.includes(agent.status)) {
           send({ type: 'task', agentId: agent.id, prompt: `Rodei no terminal: ${alert.command}\nPode continuar de onde parou.` });
         }
       });
-
-      const actions = document.createElement('div');
-      actions.className = 'term__actions';
+      const actions = el('div', 'term__actions');
       actions.append(copy, done);
-      li.append(title, reason, code, actions);
+      li.append(
+        el('h3', undefined, 'Abra o terminal'),
+        el('p', undefined, `${agentName(alert.agentId)}: ${alert.reason}`),
+        el('code', undefined, alert.command),
+        actions,
+      );
       return li;
     }),
   );
@@ -249,27 +472,16 @@ function renderTerminal() {
 function renderNotes() {
   $('notes').replaceChildren(
     ...state.permissions.map((request) => {
-      const li = document.createElement('li');
-      li.className = 'note';
-      const text = document.createElement('p');
-      const who = document.createElement('strong');
-      who.textContent = agentName(request.agentId);
-      const code = document.createElement('code');
-      code.textContent = request.summary;
-      text.append(who, ` quer usar ${request.tool}`, code);
-
-      const allow = document.createElement('button');
+      const li = el('li', 'note');
+      const text = el('p');
+      text.append(el('strong', undefined, agentName(request.agentId)), ` quer usar ${request.tool}`, el('code', undefined, request.summary));
+      const allow = el('button', undefined, 'Aprovar');
       allow.type = 'button';
-      allow.textContent = 'Aprovar';
       allow.addEventListener('click', () => send({ type: 'permission', id: request.id, allow: true }));
-      const deny = document.createElement('button');
+      const deny = el('button', 'ghost', 'Negar');
       deny.type = 'button';
-      deny.className = 'ghost';
-      deny.textContent = 'Negar';
       deny.addEventListener('click', () => send({ type: 'permission', id: request.id, allow: false }));
-
-      const actions = document.createElement('div');
-      actions.className = 'note__actions';
+      const actions = el('div', 'note__actions');
       actions.append(allow, deny);
       li.append(text, actions);
       return li;
@@ -282,12 +494,10 @@ function logVisible(entry: LogEntry) {
 }
 
 function logItem(entry: LogEntry) {
-  const li = document.createElement('li');
+  const li = el('li');
   li.dataset.kind = entry.kind;
-  const who = document.createElement('span');
-  who.className = 'log__who';
-  who.textContent = agentName(entry.agentId);
-  who.style.color = state.agents.find((a) => a.id === entry.agentId)?.color ?? '';
+  const who = el('span', 'log__who', agentName(entry.agentId));
+  who.style.color = agentById(entry.agentId)?.color ?? '';
   li.append(who, entry.text);
   return li;
 }
@@ -296,10 +506,7 @@ function renderLog() {
   const list = $('log');
   const entries = state.log.filter(logVisible);
   if (!entries.length) {
-    const empty = document.createElement('li');
-    empty.className = 'log__empty';
-    empty.textContent = 'Nada por aqui ainda. Escolha uma mesa e mande a primeira tarefa.';
-    list.replaceChildren(empty);
+    list.replaceChildren(el('li', 'log__empty', 'Nada por aqui ainda. Mande um comando geral ou fale direto com uma mesa.'));
     return;
   }
   list.replaceChildren(...entries.map(logItem));
@@ -317,12 +524,98 @@ function appendLog(entry: LogEntry) {
 
 let toastTimer: number | undefined;
 function toast(text: string) {
-  const el = $('toast');
-  el.textContent = text;
-  el.hidden = false;
+  const box = $('toast');
+  box.textContent = text;
+  box.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = window.setTimeout(() => (el.hidden = true), 5000);
+  toastTimer = window.setTimeout(() => (box.hidden = true), 5000);
 }
+
+/* ---------- Settings: roles and desk order ---------- */
+
+let draft: { agent: AgentView; role: RoleKey }[] = [];
+
+function openSettings() {
+  draft = state.agents.filter((a) => a.controllable && a.roleKey).map((agent) => ({ agent, role: agent.roleKey! }));
+  $<HTMLInputElement>('auto-switch').checked = state.autoSwitch;
+  renderSettings();
+  $<HTMLDialogElement>('settings').showModal();
+}
+
+function draftProblem() {
+  if (!draft.length) return 'O escritório não mandou a equipe. Feche e abra o escritório de novo.';
+  if (draft.filter((d) => d.role === 'coordenador').length !== 1) return 'Escolha exatamente um coordenador.';
+  if (!draft.some((d) => d.role === 'executor')) return 'Escolha pelo menos um executor.';
+  return null;
+}
+
+function renderSettings() {
+  $('settings-team').replaceChildren(
+    ...draft.map((entry, index) => {
+      const li = el('li', 'member');
+      const frame = el('span', 'card__portrait');
+      frame.style.setProperty('--agent', entry.agent.color);
+      frame.append(portrait(entry.agent));
+
+      const info = el('span', 'member__info');
+      info.append(el('span', 'card__name', entry.agent.name), el('span', 'card__role', entry.agent.kind === 'claude' ? 'Claude' : 'Codex'));
+      if (entry.agent.kind === 'codex' && entry.role === 'executor') {
+        info.append(el('span', 'member__warn', 'Como executor, o Codex edita arquivos sem post-it de permissão.'));
+      }
+
+      const select = el('select');
+      select.setAttribute('aria-label', `Papel de ${entry.agent.name}`);
+      for (const key of Object.keys(ROLE_NAMES) as RoleKey[]) {
+        const option = el('option', undefined, ROLE_NAMES[key]);
+        option.value = key;
+        option.selected = key === entry.role;
+        select.append(option);
+      }
+      select.addEventListener('change', () => {
+        entry.role = select.value as RoleKey;
+        renderSettings();
+      });
+
+      const move = (delta: number) => {
+        const target = index + delta;
+        [draft[index], draft[target]] = [draft[target], draft[index]];
+        renderSettings();
+      };
+      const up = el('button', 'ghost small', '↑');
+      up.type = 'button';
+      up.disabled = index === 0;
+      up.setAttribute('aria-label', `Subir ${entry.agent.name}`);
+      up.addEventListener('click', () => move(-1));
+      const down = el('button', 'ghost small', '↓');
+      down.type = 'button';
+      down.disabled = index === draft.length - 1;
+      down.setAttribute('aria-label', `Descer ${entry.agent.name}`);
+      down.addEventListener('click', () => move(1));
+      const order = el('span', 'member__order');
+      order.append(up, down);
+
+      li.append(frame, info, select, order);
+      return li;
+    }),
+  );
+  const problem = draftProblem();
+  const warning = $('settings-warning');
+  warning.hidden = !problem;
+  warning.textContent = problem ?? '';
+  $('settings-form').querySelector<HTMLButtonElement>('button[value="save"]')!.disabled = !!problem;
+}
+
+$('open-settings').addEventListener('click', openSettings);
+$('settings').addEventListener('close', () => {
+  const dialog = $<HTMLDialogElement>('settings');
+  if (dialog.returnValue === 'save' && !draftProblem()) {
+    send({
+      type: 'team',
+      team: draft.map((d) => ({ id: d.agent.id, role: d.role })),
+      autoSwitch: $<HTMLInputElement>('auto-switch').checked,
+    });
+  }
+});
 
 /* ---------- Actions ---------- */
 
@@ -342,6 +635,14 @@ $('scene').addEventListener('click', (event) => {
   }
 });
 
+function submitOnCtrlEnter(fieldId: string, formId: string) {
+  $(fieldId).addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) $<HTMLFormElement>(formId).requestSubmit();
+  });
+}
+submitOnCtrlEnter('task', 'task-form');
+submitOnCtrlEnter('command', 'command-form');
+
 $('task-form').addEventListener('submit', (event) => {
   event.preventDefault();
   const field = $<HTMLTextAreaElement>('task');
@@ -350,9 +651,15 @@ $('task-form').addEventListener('submit', (event) => {
   field.value = '';
 });
 
-$('task').addEventListener('keydown', (event) => {
-  if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) $<HTMLFormElement>('task-form').requestSubmit();
+$('command-form').addEventListener('submit', (event) => {
+  event.preventDefault();
+  const field = $<HTMLTextAreaElement>('command');
+  if (!field.value.trim()) return;
+  send({ type: 'command', prompt: field.value });
+  field.value = '';
 });
+
+$('stop-plan').addEventListener('click', () => send({ type: 'stop-plan' }));
 
 $('stop').addEventListener('click', () => {
   if (state.selectedId) send({ type: 'stop', agentId: state.selectedId });

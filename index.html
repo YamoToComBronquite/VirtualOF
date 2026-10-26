@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Turno da Noite</title>
+    <title>VirtualOF</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -15,13 +15,14 @@
   <body>
     <main class="office">
       <div class="office__stage"><canvas id="scene" aria-label="Escritório com os agentes nas mesas"></canvas></div>
-      <p class="office__hint">Clique numa mesa para falar com quem está sentado nela.</p>
+      <p class="office__hint">Clique numa mesa para falar direto com quem está sentado nela.</p>
     </main>
 
     <aside class="panel">
       <header class="panel__head">
         <h1>Turno da Noite</h1>
         <span id="connection" class="connection">conectando…</span>
+        <button type="button" id="open-settings" class="ghost small">Configurações</button>
       </header>
 
       <form id="project-form" class="project">
@@ -32,20 +33,59 @@
         </div>
       </form>
 
-      <ul id="team" class="team" aria-label="Equipe"></ul>
+      <section class="command" aria-labelledby="command-title">
+        <h2 id="command-title">Comando geral</h2>
+        <p id="command-hint" class="hint"></p>
+        <form id="command-form" class="task">
+          <label for="command" class="visually-hidden">Comando geral</label>
+          <textarea id="command" rows="3" placeholder="Ex.: crie uma página de login com validação e testes"></textarea>
+          <div class="task__actions">
+            <button type="submit" id="send-command">Mandar ao coordenador</button>
+            <button type="button" id="stop-plan" class="ghost" hidden>Parar plano</button>
+          </div>
+        </form>
+        <div id="plan" class="plan" hidden>
+          <p id="plan-status" class="plan__status"></p>
+          <ol id="plan-steps" class="plan__steps"></ol>
+          <p id="plan-summary" class="plan__summary" hidden></p>
+        </div>
+      </section>
+
+      <section class="crew" aria-labelledby="crew-title">
+        <h2 id="crew-title">Equipe</h2>
+        <ul id="team" class="team"></ul>
+      </section>
+
+      <section class="usage" aria-labelledby="usage-title">
+        <h2 id="usage-title">Consumo</h2>
+        <ul id="quota" class="quota"></ul>
+        <table class="usage__table">
+          <thead>
+            <tr>
+              <th scope="col">Agente</th>
+              <th scope="col">Tarefas</th>
+              <th scope="col">Tokens</th>
+              <th scope="col">Se fosse API</th>
+            </tr>
+          </thead>
+          <tbody id="usage-rows"></tbody>
+        </table>
+        <p id="auto-switch-state" class="hint"></p>
+      </section>
 
       <section id="desk" class="desk" hidden>
         <h2 id="desk-name"></h2>
         <p id="desk-activity" class="desk__activity"></p>
+        <dl id="desk-toolkit" class="toolkit"></dl>
         <form id="task-form" class="task">
           <label for="task" id="task-label">Tarefa</label>
-          <textarea id="task" rows="4"></textarea>
+          <textarea id="task" rows="3"></textarea>
           <div class="task__actions">
             <button type="submit" id="send">Mandar tarefa</button>
             <button type="button" id="stop" class="ghost">Parar</button>
           </div>
         </form>
-        <p id="watch-only" class="watch-only" hidden>
+        <p id="watch-only" class="hint" hidden>
           O escritório só acompanha o Antigravity. Para dar uma tarefa, abra o Antigravity.
         </p>
       </section>
@@ -68,6 +108,28 @@
 
       <div id="toast" class="toast" role="status" hidden></div>
     </aside>
+
+    <dialog id="settings" class="settings" aria-labelledby="settings-title">
+      <form method="dialog" id="settings-form">
+        <h2 id="settings-title">Configurações da equipe</h2>
+        <p class="hint">
+          Escolha o papel de cada um e a ordem das mesas. Precisa de um coordenador e pelo menos um executor.
+        </p>
+        <ol id="settings-team" class="settings__team"></ol>
+        <label class="switch">
+          <input type="checkbox" id="auto-switch" />
+          <span>
+            Quando uma conta bater o limite de uso, passar a tarefa para um agente de outra conta
+            <small>Os dois Claude usam a mesma conta, então o substituto do Claude é o Codex e vice-versa.</small>
+          </span>
+        </label>
+        <p id="settings-warning" class="settings__warning" hidden></p>
+        <div class="settings__actions">
+          <button type="submit" value="save">Salvar equipe</button>
+          <button type="submit" value="cancel" class="ghost" formnovalidate>Cancelar</button>
+        </div>
+      </form>
+    </dialog>
 
     <script type="module" src="/src/main.ts"></script>
   </body>

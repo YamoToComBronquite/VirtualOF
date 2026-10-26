@@ -8,8 +8,13 @@ Um escritório virtual em pixel art para os seus agentes de IA. Você passa tare
 
 ## O que ele faz
 
-- **Comanda os agentes pelo escritório.** Clique numa mesa, escreva a tarefa e mande. Sem terminal.
-- **Claude e Codex juntos.** Dois agentes Claude (coordenador e executor) rodam pelo [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk); um revisor Codex roda pelo [Codex SDK](https://github.com/openai/codex/tree/main/sdk/typescript) em modo só leitura.
+- **Um comando geral, a equipe inteira.** Você escreve o que quer uma vez. O coordenador monta os passos na melhor ordem, o escritório passa cada passo para o agente certo, e depois de cada passo o coordenador pode refazer o resto do plano (por exemplo, para corrigir o que o revisor apontou). O plano aparece como uma lista ao vivo.
+- **Você escolhe quem faz o quê.** Em **Configurações**, defina o papel de cada agente (coordenador, executor, revisor ou de folga) e a ordem das mesas. Qualquer um pode coordenar, inclusive o Codex.
+- **Consumo à vista.** O painel **Consumo** mostra o limite da assinatura de cada conta (o Claude informa quanto da janela de 5 horas ou semanal você usou e quando renova; o Codex avisa quando bate o limite) e o gasto de cada agente: tarefas, tokens e quanto custaria pela API.
+- **Troca automática no limite.** Se uma conta bater o limite no meio de um comando geral, um agente de outra conta assume aquele passo, ou a própria coordenação, e o plano continua.
+- **Suas skills e plugins vão junto.** Os agentes Claude carregam as mesmas skills, plugins, servidores MCP e CLAUDE.md do seu Claude Code; o Codex usa a configuração dele em `~/.codex`. Cada mesa mostra o que o agente carregou.
+- **Ou fale direto com um agente.** Clique numa mesa, escreva a tarefa e mande. Sem terminal.
+- **Claude e Codex juntos.** Dois agentes Claude rodam pelo [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk); o Codex roda pelo [Codex SDK](https://github.com/openai/codex/tree/main/sdk/typescript), só leitura a não ser que seja executor.
 - **Permissões viram post-its.** Quando o Claude quer editar um arquivo ou rodar um comando, aparece um post-it com **Aprovar** e **Negar**.
 - **Cartão "Abra o terminal".** Se um agente precisar de algo que só você pode fazer (login, instalação, comando interativo), ele para e o escritório mostra o comando exato para copiar. Clique em **Já rodei** e ele continua.
 - **Acompanha o Antigravity.** As conversas do Antigravity aparecem como personagens que se acendem quando estão trabalhando. É só acompanhamento: tarefas para o Antigravity continuam pelo próprio Antigravity.
@@ -44,12 +49,13 @@ Tudo fica em `escritorio.config.json`:
 | Chave | O que define |
 | --- | --- |
 | `porta` | Porta do servidor local (padrão `4321`) |
-| `agentes` | A equipe: `id`, `nome`, `tipo` (`claude` ou `codex`), `papel`, `cor` (cor da camisa), `instrucoes` (instruções do papel) e, no Codex, `sandbox` (`read-only` por padrão) |
+| `papeis` | Instruções de cada papel: `coordenador`, `executor`, `revisor` |
+| `agentes` | A equipe: `id`, `nome`, `tipo` (`claude` ou `codex`), `papel` (papel inicial) e `cor` (cor da camisa) |
 | `antigravity.pasta` | Onde o Antigravity guarda as conversas (`~/.gemini/antigravity-ide/conversations`) |
 | `antigravity.ativoSegundos` | Há quantos segundos a conversa precisa ter mudado para contar como "trabalhando" |
 | `antigravity.maximo` | Quantas conversas do Antigravity mostrar |
 
-A pasta do projeto que você escolhe na página fica salva em `.escritorio.local.json`, que não vai para o git.
+O que você muda na página (pasta do projeto, papéis, ordem das mesas, troca automática) fica salvo em `.escritorio.local.json`, que não vai para o git.
 
 ## Segurança
 
@@ -57,14 +63,13 @@ Os agentes podem ler e alterar arquivos e rodar comandos no seu computador. Por 
 
 - O servidor só escuta em `127.0.0.1`, e o WebSocket só aceita conexões da própria página do escritório.
 - Toda ação do Claude que precisa de permissão passa por um post-it que você aprova.
-- O Codex não tem aprovação por ação nesse modo, então roda em sandbox `read-only` por padrão. Só mude o `sandbox` se confiar nele para escrever.
+- O Codex não tem aprovação por ação nesse modo, então roda em sandbox `read-only`, a não ser quando é executor (ou cobre um). Como executor ele pode editar arquivos do projeto sem post-it; a tela de Configurações avisa isso.
 - O Antigravity é só observado: o escritório vê quando os arquivos de conversa mudam e nunca abre nem altera esses arquivos.
 
 ## Próximos passos
 
 - Fluxo de projeto novo com seletor de pasta e `git init`
 - Um checkpoint no git antes de cada tarefa, com botão **Desfazer tarefa**, e o Codex revisando exatamente esse diff
-- O coordenador distribuindo tarefas para os outros agentes sozinho
 - Versão aplicativo de desktop
 
 ## Aviso

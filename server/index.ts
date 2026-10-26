@@ -7,31 +7,18 @@ import { createServer as createVite } from 'vite';
 import { WebSocketServer, type WebSocket } from 'ws';
 import type { ClientMessage, ServerMessage } from '../shared/types.ts';
 import { watchAntigravity } from './agents/antigravity.ts';
-import { ClaudeAgent } from './agents/claude.ts';
-import { CodexAgent } from './agents/codex.ts';
 import { loadConfig, saveProject } from './config.ts';
 import { Office } from './office.ts';
+import { Orchestrator } from './orchestrator.ts';
+import { Team } from './team.ts';
 
 const HOST = '127.0.0.1';
 const root = fileURLToPath(new URL('..', import.meta.url));
 const config = loadConfig();
 const office = new Office(config.projeto);
-
-const runners = new Map<string, ClaudeAgent | CodexAgent>();
-for (const agent of config.agentes) {
-  runners.set(agent.id, agent.tipo === 'claude' ? new ClaudeAgent(agent, office) : new CodexAgent(agent, office));
-  office.addAgent({
-    id: agent.id,
-    name: agent.nome,
-    kind: agent.tipo,
-    role: agent.papel,
-    color: agent.cor,
-    status: 'idle',
-    activity: 'Livre',
-    controllable: true,
-    usage: { inputTokens: 0, outputTokens: 0 },
-  });
-}
+office.autoSwitch = config.trocaAutomatica ?? true;
+const team = new Team(config, office);
+const orchestrator = new Orchestrator(office, team);
 watchAntigravity(config.antigravity, office);
 
 function isFolder(path: string) {
@@ -41,17 +28,41 @@ function isFolder(path: string) {
 function handle(msg: ClientMessage) {
   switch (msg.type) {
     case 'task': {
-      const runner = runners.get(msg.agentId);
+      const member = team.get(msg.agentId);
+      const runner = member?.runner;
       const prompt = msg.prompt.trim();
-      if (!runner || !prompt) return;
+      if (!member || !runner || !prompt) return;
+      if (office.isLimited(team.account(member))) {
+        const cover = team.substitute(member);
+        return office.notice(
+          `${member.config.nome} está sem limite de uso agora (veja em Consumo).` + (cover ? ` ${cover.config.nome} está livre para essa tarefa.` : ''),
+        );
+      }
       if (!isFolder(office.project)) return office.notice('Escolha a pasta do projeto antes de mandar uma tarefa.');
+      if (orchestrator.running) return office.notice('Tem um comando geral em andamento. Pare o plano para falar direto com um agente.');
       if (runner.busy) return office.notice('Esse agente ainda está numa tarefa. Espere terminar ou clique em Parar.');
       void runner.run(prompt, office.project);
       return;
     }
     case 'stop':
-      runners.get(msg.agentId)?.stop();
+      team.get(msg.agentId)?.runner.stop();
       return;
+    case 'command': {
+      const prompt = msg.prompt.trim();
+      if (!prompt) return;
+      if (!isFolder(office.project)) return office.notice('Escolha a pasta do projeto antes de mandar um comando.');
+      void orchestrator.start(prompt, office.project);
+      return;
+    }
+    case 'stop-plan':
+      orchestrator.stop();
+      return;
+    case 'team': {
+      if (orchestrator.running) return office.notice('Pare o comando geral antes de mudar a equipe.');
+      const error = team.apply(msg.team, msg.autoSwitch !== false);
+      office.notice(error ?? 'Equipe atualizada.');
+      return;
+    }
     case 'permission':
       office.answerPermission(msg.id, msg.allow);
       return;

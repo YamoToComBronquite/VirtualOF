@@ -2,10 +2,22 @@
 
 export type AgentKind = 'claude' | 'codex' | 'antigravity';
 
+/** Job an agent has on the team; 'folga' means it sits out of general commands. */
+export type RoleKey = 'coordenador' | 'executor' | 'revisor' | 'folga';
+
+export const ROLE_NAMES: Record<RoleKey, string> = {
+  coordenador: 'Coordenador',
+  executor: 'Executor',
+  revisor: 'Revisor',
+  folga: 'De folga',
+};
+
 /** What the character is doing at the desk; drives the animation and the status text. */
 export type AgentStatus = 'idle' | 'thinking' | 'reading' | 'writing' | 'running' | 'waiting' | 'done' | 'error';
 
 export interface AgentUsage {
+  /** Tasks this agent took on since the office started. */
+  tasks: number;
   inputTokens: number;
   outputTokens: number;
   /** Estimated by the Claude Agent SDK; Codex only reports tokens. */
@@ -16,13 +28,18 @@ export interface AgentView {
   id: string;
   name: string;
   kind: AgentKind;
+  /** Display name of the role, e.g. "Executor". */
   role: string;
+  /** Undefined for agents the office only watches. */
+  roleKey?: RoleKey;
   color: string;
   status: AgentStatus;
   /** Short line about the current step, e.g. "Editando App.tsx". */
   activity: string;
   /** False for agents the office can only watch (Antigravity). */
   controllable: boolean;
+  /** What the agent loaded on its last start: skills, plugins and MCP servers. */
+  toolkit?: { skills: string[]; plugins: string[]; mcp: string[]; note?: string };
   usage: AgentUsage;
 }
 
@@ -43,6 +60,37 @@ export interface PermissionRequest {
   summary: string;
 }
 
+/** Agents bill to an account: both Claude agents share one, Codex uses the ChatGPT one. */
+export type Account = 'claude' | 'codex';
+
+/** How much of an account's subscription limit is used, as far as its SDK tells us. */
+export interface Quota {
+  status: 'unknown' | 'ok' | 'warning' | 'limited';
+  /** 0..1, only Claude reports it. */
+  utilization?: number;
+  /** Which window the numbers are about, e.g. "5 horas". */
+  window?: string;
+  /** Epoch ms when the limit resets. */
+  resetsAt?: number;
+}
+
+export type PlanStepStatus = 'pending' | 'running' | 'done' | 'error' | 'skipped';
+
+export interface PlanStep {
+  id: number;
+  agentId: string;
+  task: string;
+  status: PlanStepStatus;
+}
+
+/** A general command: the coordinator orders the steps, the office runs them one by one. */
+export interface Plan {
+  command: string;
+  status: 'planning' | 'running' | 'done' | 'stopped' | 'error';
+  steps: PlanStep[];
+  summary?: string;
+}
+
 export type ServerMessage =
   | {
       type: 'snapshot';
@@ -50,8 +98,14 @@ export type ServerMessage =
       log: LogEntry[];
       permissions: PermissionRequest[];
       terminal: TerminalAlert[];
+      plan: Plan | null;
+      quota: Record<Account, Quota>;
+      autoSwitch: boolean;
       project: string;
     }
+  | { type: 'quota'; quota: Record<Account, Quota> }
+  | { type: 'auto-switch'; enabled: boolean }
+  | { type: 'plan'; plan: Plan | null }
   | { type: 'agent'; agent: AgentView }
   | { type: 'agent-removed'; id: string }
   | { type: 'log'; entry: LogEntry }
@@ -75,4 +129,7 @@ export type ClientMessage =
   | { type: 'stop'; agentId: string }
   | { type: 'permission'; id: string; allow: boolean }
   | { type: 'terminal-done'; id: string }
+  | { type: 'command'; prompt: string }
+  | { type: 'team'; team: { id: string; role: RoleKey }[]; autoSwitch: boolean }
+  | { type: 'stop-plan' }
   | { type: 'project'; path: string };

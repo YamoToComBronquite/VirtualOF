@@ -134,6 +134,57 @@ interface Look {
   headset: boolean;
 }
 
+const looks = new Map<string, Look>();
+
+/** Skin, hair and hairstyle come from the agent id, so a character looks the same everywhere. */
+function lookFor(agent: AgentView): Look {
+  let look = looks.get(agent.id);
+  if (look) return look;
+  const h = hash(agent.id);
+  const skin = SKINS[h % SKINS.length];
+  const hair = HAIRS[(h >> 4) % HAIRS.length];
+  look = {
+    palette: {
+      o: C.outline,
+      h: hair,
+      H: shade(hair, 1.45),
+      s: skin,
+      S: shade(skin, 0.82),
+      e: C.outline,
+      m: shade(skin, 0.62),
+      w: C.paper,
+      c: agent.color,
+      C: shade(agent.color, 0.72),
+    },
+    overlay: hairOverlay(HAIR_STYLES[(h >> 8) % HAIR_STYLES.length]),
+    headset: agent.kind === 'antigravity',
+  };
+  looks.set(agent.id, look);
+  return look;
+}
+
+/** Draws the seated character with its top-left corner at (x, y), 1 unit per pixel. */
+export function paintCharacter(ctx: CanvasRenderingContext2D, agent: AgentView, x: number, y: number) {
+  const look = lookFor(agent);
+  const dot = (px: number, py: number, color: string) => {
+    ctx.fillStyle = color;
+    ctx.fillRect(px, py, 1, 1);
+  };
+  BODY.forEach((row, j) => {
+    for (let i = 0; i < row.length; i++) {
+      const color = look.palette[row[i]];
+      if (color) dot(x + i, y + j, color);
+    }
+  });
+  for (const [dx, dy, slot] of look.overlay) dot(x + dx, y + dy, look.palette[slot]);
+  if (look.headset) {
+    ctx.fillStyle = '#2e3a66';
+    ctx.fillRect(x + 2, y - 1, 12, 1);
+    ctx.fillRect(x + 1, y + 5, 2, 4);
+    ctx.fillRect(x + 13, y + 5, 2, 4);
+  }
+}
+
 export class Scene {
   /** The room is painted at 1:1 on this small canvas, then blown up onto the visible one. */
   private world = document.createElement('canvas');
@@ -142,7 +193,6 @@ export class Scene {
   private scale = 1;
   private offsetX = 0;
   private offsetY = 0;
-  private looks = new Map<string, Look>();
   agents: AgentView[] = [];
   selectedId?: string;
   doneCount = 0;
@@ -210,15 +260,6 @@ export class Scene {
   private box(x: number, y: number, w: number, h: number, fill: string, outline = C.outline) {
     this.rect(x, y, w, h, outline);
     this.rect(x + 1, y + 1, w - 2, h - 2, fill);
-  }
-
-  private sprite(rows: string[], x: number, y: number, palette: Record<string, string>) {
-    rows.forEach((row, j) => {
-      for (let i = 0; i < row.length; i++) {
-        const color = palette[row[i]];
-        if (color) this.rect(x + i, y + j, 1, 1, color);
-      }
-    });
   }
 
   /* ---------- Room ---------- */
@@ -354,32 +395,6 @@ export class Scene {
 
   /* ---------- Desks and people ---------- */
 
-  private look(agent: AgentView): Look {
-    let look = this.looks.get(agent.id);
-    if (look) return look;
-    const h = hash(agent.id);
-    const skin = SKINS[h % SKINS.length];
-    const hair = HAIRS[(h >> 4) % HAIRS.length];
-    look = {
-      palette: {
-        o: C.outline,
-        h: hair,
-        H: shade(hair, 1.45),
-        s: skin,
-        S: shade(skin, 0.82),
-        e: C.outline,
-        m: shade(skin, 0.62),
-        w: C.paper,
-        c: agent.color,
-        C: shade(agent.color, 0.72),
-      },
-      overlay: hairOverlay(HAIR_STYLES[(h >> 8) % HAIR_STYLES.length]),
-      headset: agent.kind === 'antigravity',
-    };
-    this.looks.set(agent.id, look);
-    return look;
-  }
-
   private desk(cx: number, top: number, agent: AgentView | undefined, time: number) {
     const left = cx - DESK_W / 2;
     const selected = agent && agent.id === this.selectedId;
@@ -427,18 +442,12 @@ export class Scene {
   }
 
   private person(cx: number, top: number, agent: AgentView, time: number) {
-    const look = this.look(agent);
+    const look = lookFor(agent);
     const busy = agent.status !== 'waiting' && ACTIVE.includes(agent.status);
     const bob = busy && Math.floor(time / 240) % 2 ? 1 : 0;
     const x = cx - 8;
     const y = top - 22 + bob;
-    this.sprite(BODY, x, y, look.palette);
-    for (const [dx, dy, slot] of look.overlay) this.rect(x + dx, y + dy, 1, 1, look.palette[slot]);
-    if (look.headset) {
-      this.rect(x + 2, y - 1, 12, 1, '#2e3a66');
-      this.rect(x + 1, y + 5, 2, 4, '#2e3a66');
-      this.rect(x + 13, y + 5, 2, 4, '#2e3a66');
-    }
+    paintCharacter(this.ctx, agent, x, y);
     // Blink now and then
     if (Math.floor(time / 100) % 37 === 0) {
       this.rect(x + 5, y + 6, 1, 2, look.palette.s);
@@ -450,7 +459,7 @@ export class Scene {
 
   /** Forearms resting on the keyboard; they take turns while typing. */
   private hands(cx: number, top: number, agent: AgentView, time: number) {
-    const look = this.look(agent);
+    const look = lookFor(agent);
     const typing = agent.status === 'writing' || agent.status === 'running';
     const tap = typing ? Math.floor(time / 120) % 2 : 0;
     for (const [hx, up] of [

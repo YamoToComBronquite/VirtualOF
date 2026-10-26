@@ -1,4 +1,4 @@
-import { ROLE_NAMES, type Account, type MemberSettings, type RoleKey } from '../shared/types.ts';
+import { ROLE_NAMES, WORKER_ROLES, type Account, type MemberSettings, type RoleKey } from '../shared/types.ts';
 import { AgyAgent } from './agents/agy.ts';
 import { ClaudeAgent } from './agents/claude.ts';
 import { CodexAgent } from './agents/codex.ts';
@@ -68,7 +68,7 @@ export class Team {
 
   /** Everyone a coordinator can hand work to. */
   workers() {
-    return this.members.filter((m) => m.config.papel === 'executor' || m.config.papel === 'revisor');
+    return this.members.filter((m) => WORKER_ROLES.includes(m.config.papel));
   }
 
   get busy() {
@@ -96,7 +96,7 @@ export class Team {
     // Free accounts cover first, so a limit does not start spending on another paid plan.
     const cost = (m: Member) => (FREE_ACCOUNTS.includes(this.account(m)) ? 0 : 1);
     const rank = (m: Member) =>
-      m.config.papel === member.config.papel ? 0 : m.config.papel === 'executor' || m.config.papel === 'revisor' ? 1 : m.config.papel === 'folga' ? 2 : 3;
+      m.config.papel === member.config.papel ? 0 : WORKER_ROLES.includes(m.config.papel) ? 1 : m.config.papel === 'folga' ? 2 : 3;
     return free.sort((a, b) => cost(a) - cost(b) || rank(a) - rank(b))[0] ?? null;
   }
 
@@ -148,8 +148,8 @@ export class Team {
     if (team.length !== this.members.length || !team.every((t) => this.get(t.id) && t.role in ROLE_NAMES)) {
       return 'Equipe inválida.';
     }
-    if (team.filter((t) => t.role === 'coordenador').length !== 1) return 'Escolha exatamente um coordenador.';
-    if (!team.some((t) => t.role === 'executor')) return 'Escolha pelo menos um executor.';
+    if (team.filter((t) => t.role === 'coordenador').length !== 1) return 'Escolha exatamente um supervisor.';
+    if (!team.some((t) => t.role === 'executor')) return 'Escolha pelo menos um fullstack.';
     const models = this.office.models;
     for (const t of team) {
       const kind = this.get(t.id)!.config.tipo;

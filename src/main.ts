@@ -1,5 +1,7 @@
 import {
+  EDITING_ROLES,
   ROLE_NAMES,
+  WORKER_ROLES,
   type Account,
   type ModelCatalog,
   type Quota,
@@ -536,32 +538,70 @@ function formatTokens(n: number) {
 /** Plan steps the user expanded, kept open across re-renders. */
 const openSteps = new Set<number>();
 
-/** "Para": the whole team, or one agent, each with its portrait. */
+/** One line of the "Para" list: portrait, name, and what that choice means. */
+function targetLine(agent: AgentView | undefined) {
+  const line = el('span', 'picker__line');
+  if (agent) {
+    line.append(portrait(agent), el('span', 'picker__name', agent.name), el('span', 'picker__role', agent.role));
+  } else {
+    line.append(el('span', 'picker__team', '★'), el('span', 'picker__name', 'Equipe'), el('span', 'picker__role', 'Comando geral'));
+  }
+  return line;
+}
+
+/** "Para": a button showing who gets the message; clicking it opens the list of the team. */
 function renderTargets() {
-  const chips = [
-    { id: 'equipe', label: 'Equipe', agent: undefined as AgentView | undefined },
-    ...state.agents.filter((a) => a.controllable).map((agent) => ({ id: agent.id, label: agent.name, agent })),
-  ];
-  if (!chips.some((c) => c.id === state.target)) state.target = 'equipe';
+  const options = [undefined, ...state.agents.filter((a) => a.controllable)];
+  if (!options.some((a) => (a?.id ?? 'equipe') === state.target)) state.target = 'equipe';
+  const chosen = options.find((a) => (a?.id ?? 'equipe') === state.target);
+  $('target-button').replaceChildren(targetLine(chosen), el('span', 'picker__caret', '▾'));
   $('targets').replaceChildren(
-    ...chips.map(({ id, label, agent }) => {
-      const chip = el('button', 'target');
-      chip.type = 'button';
-      chip.setAttribute('role', 'radio');
-      chip.setAttribute('aria-checked', String(id === state.target));
-      if (agent) {
-        chip.append(portrait(agent));
-        chip.dataset.status = agent.status;
-        chip.title = `${agent.name}: ${agent.role}`;
-      } else {
-        chip.title = 'Comando geral: o coordenador divide o trabalho';
-      }
-      chip.append(label);
-      chip.addEventListener('click', () => setTarget(id));
-      return chip;
+    ...options.map((agent) => {
+      const id = agent?.id ?? 'equipe';
+      const li = el('li');
+      const option = el('button', 'picker__option');
+      option.type = 'button';
+      option.setAttribute('role', 'option');
+      option.setAttribute('aria-selected', String(id === state.target));
+      if (agent) option.dataset.status = agent.status;
+      option.append(targetLine(agent));
+      if (agent) option.append(el('span', 'picker__status', STATUS_TEXT[agent.status]));
+      option.addEventListener('click', () => {
+        closeTargets();
+        setTarget(id);
+      });
+      li.append(option);
+      return li;
     }),
   );
 }
+
+function openTargets() {
+  $('targets').hidden = false;
+  $('target-button').setAttribute('aria-expanded', 'true');
+  $('targets').querySelector<HTMLButtonElement>('[aria-selected="true"]')?.focus();
+}
+
+function closeTargets() {
+  $('targets').hidden = true;
+  $('target-button').setAttribute('aria-expanded', 'false');
+}
+
+$('target-button').addEventListener('click', () => ($('targets').hidden ? openTargets() : closeTargets()));
+document.addEventListener('click', (event) => {
+  if (!(event.target as Element).closest('.picker')) closeTargets();
+});
+$('targets').addEventListener('keydown', (event) => {
+  const options = [...$('targets').querySelectorAll<HTMLButtonElement>('.picker__option')];
+  const index = options.indexOf(document.activeElement as HTMLButtonElement);
+  if (event.key === 'Escape') {
+    closeTargets();
+    $('target-button').focus();
+  } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    event.preventDefault();
+    options[(index + (event.key === 'ArrowDown' ? 1 : options.length - 1)) % options.length]?.focus();
+  }
+});
 
 function setTarget(id: string) {
   state.target = id;
@@ -584,7 +624,7 @@ function renderProject() {
 
 function renderCommand() {
   const coordinator = state.agents.find((a) => a.roleKey === 'coordenador');
-  const workers = state.agents.filter((a) => a.roleKey === 'executor' || a.roleKey === 'revisor').map((a) => a.name);
+  const workers = state.agents.filter((a) => a.roleKey && WORKER_ROLES.includes(a.roleKey)).map((a) => a.name);
   const plan = state.plan;
   const running = plan?.status === 'planning' || plan?.status === 'running';
   renderTargets();
@@ -800,8 +840,8 @@ function openSettings() {
 
 function draftProblem() {
   if (!draft.length) return 'O escritório não mandou a equipe. Feche e abra o escritório de novo.';
-  if (draft.filter((d) => d.role === 'coordenador').length !== 1) return 'Escolha exatamente um coordenador.';
-  if (!draft.some((d) => d.role === 'executor')) return 'Escolha pelo menos um executor.';
+  if (draft.filter((d) => d.role === 'coordenador').length !== 1) return 'Escolha exatamente um supervisor.';
+  if (!draft.some((d) => d.role === 'executor')) return 'Escolha pelo menos um fullstack.';
   return null;
 }
 
@@ -822,7 +862,7 @@ function renderSettings() {
       nickname.setAttribute('aria-label', `Apelido de ${entry.agent.defaultName}`);
       nickname.addEventListener('input', () => (entry.nickname = nickname.value));
       info.append(nickname, el('span', 'card__role', `${entry.agent.defaultName} · ${translate(ENGINE_NAMES[entry.agent.kind])}`));
-      if (entry.agent.kind === 'codex' && entry.role === 'executor') {
+      if (entry.agent.kind === 'codex' && EDITING_ROLES.includes(entry.role)) {
         info.append(el('span', 'member__warn', 'Como executor, o Codex edita arquivos sem post-it de permissão.'));
       }
       if (entry.agent.kind === 'antigravity') {

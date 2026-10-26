@@ -88,6 +88,7 @@ export async function startOffice(options: OfficeOptions) {
         }
         if (orchestrator.running) return office.notice('Tem um comando geral em andamento. Pare o plano para falar direto com um agente.');
         if (runner.busy) return office.notice('Esse agente ainda está numa tarefa. Espere terminar ou clique em Parar.');
+        office.write(member.config.id, 'user', prompt);
         if (isFolder(office.project)) {
           void runner.run(prompt, office.project);
         } else {
@@ -103,6 +104,7 @@ export async function startOffice(options: OfficeOptions) {
         const prompt = msg.prompt.trim();
         if (!prompt) return;
         if (!isFolder(office.project)) return office.notice('Escolha a pasta do projeto antes de mandar um comando.');
+        office.write('equipe', 'user', prompt);
         void orchestrator.start(prompt, office.project);
         return;
       }

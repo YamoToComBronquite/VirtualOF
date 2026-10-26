@@ -48,7 +48,8 @@ export interface AgentView {
   usage: AgentUsage;
 }
 
-export type LogKind = 'task' | 'text' | 'tool' | 'result' | 'error' | 'permission';
+/** 'user' is what the user typed; its agentId is the agent, or 'equipe' for a general command. */
+export type LogKind = 'user' | 'task' | 'text' | 'tool' | 'result' | 'error' | 'permission';
 
 export interface LogEntry {
   id: number;

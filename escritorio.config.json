@@ -43,6 +43,13 @@
       "tipo": "antigravity",
       "papel": "folga",
       "cor": "#6f8cf0"
+    },
+    {
+      "id": "astra",
+      "nome": "Astra",
+      "tipo": "codex",
+      "papel": "folga",
+      "cor": "#5fbf8f"
     }
   ],
   "antigravity": {

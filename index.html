@@ -20,6 +20,23 @@
           <ul id="team" class="team"></ul>
         </section>
 
+        <section id="desk" class="desk" aria-labelledby="desk-name" hidden>
+          <h2 id="desk-name"></h2>
+          <div id="stress" class="stress">
+            <div class="stress__head">
+              <span>Estresse</span>
+              <strong id="stress-label"></strong>
+            </div>
+            <div id="stress-bar" class="stress__bar" role="meter" aria-valuemin="0" aria-valuemax="100"></div>
+            <p id="stress-detail" class="hint"></p>
+          </div>
+          <p id="desk-activity" class="desk__activity"></p>
+          <dl id="desk-toolkit" class="toolkit"></dl>
+          <p id="watch-only" class="hint" hidden>
+            O escritório só acompanha o Antigravity. Para dar uma tarefa, abra o Antigravity.
+          </p>
+        </section>
+
         <section class="usage" aria-labelledby="usage-title">
           <h2 id="usage-title">Consumo</h2>
                     <table class="usage__table">
@@ -107,78 +124,47 @@
         </div>
       </form>
 
-      <section class="command" aria-labelledby="command-title">
-        <div class="command__head">
-          <h2 id="command-title">Comando geral</h2>
-          <div id="command-crew" class="command__crew"></div>
+      <section class="chat" aria-label="Conversa">
+        <div id="chat-empty" class="chat__empty">
+          <p class="chat__hello">Comece por aqui</p>
+          <p class="hint">Mande um comando para a equipe inteira ou escolha alguém em <strong>Para</strong> para falar só com essa pessoa.</p>
+          <div id="command-ideas" class="ideas" aria-label="Ideias de comando">
+            <button type="button" class="idea">Revise o projeto e aponte os bugs</button>
+            <button type="button" class="idea">Escreva testes para o que já existe</button>
+            <button type="button" class="idea">Explique como o projeto está organizado</button>
+          </div>
         </div>
-        <p id="command-hint" class="hint"></p>
+        <ol id="log" class="chat__log"></ol>
+      </section>
+
+      <div class="dock">
+        <ul id="terminal" class="dock__cards" aria-label="Precisa do terminal"></ul>
+        <ul id="notes" class="dock__cards" aria-label="Pedidos de permissão"></ul>
+
+        <details id="plan" class="plan" hidden>
+          <summary><span id="plan-status" class="plan__status"></span><span id="plan-count" class="plan__count"></span></summary>
+          <ol id="plan-steps" class="plan__steps"></ol>
+          <p id="plan-summary" class="plan__summary" hidden></p>
+        </details>
+
         <form id="command-form" class="composer">
-          <label for="command" class="visually-hidden">Comando geral</label>
+          <div class="composer__to">
+            <span id="targets-label">Para</span>
+            <div id="targets" class="targets" role="radiogroup" aria-labelledby="targets-label"></div>
+          </div>
+          <label for="command" class="visually-hidden">Mensagem</label>
           <textarea id="command" rows="2" placeholder="O que a equipe deve fazer?"></textarea>
           <div class="composer__bar">
-            <span class="composer__keys">Enter manda, Shift + Enter pula linha</span>
-            <button type="button" id="stop-plan" class="ghost small" hidden>Parar plano</button>
-            <button type="submit" id="send-command" class="composer__send" aria-label="Mandar ao coordenador" title="Mandar ao coordenador">
+            <span id="command-hint" class="composer__keys"></span>
+            <button type="button" id="stop-plan" class="composer__stop" aria-label="Parar" title="Parar" hidden>
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 4.5h7v7h-7z"/></svg>
+            </button>
+            <button type="submit" id="send-command" class="composer__send" aria-label="Mandar" title="Mandar (Enter)">
               <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 13V3 M3.5 7.5L8 3l4.5 4.5"/></svg>
             </button>
           </div>
         </form>
-        <div id="command-ideas" class="ideas" aria-label="Ideias de comando">
-          <button type="button" class="idea">Revise o projeto e aponte os bugs</button>
-          <button type="button" class="idea">Escreva testes para o que já existe</button>
-          <button type="button" class="idea">Explique como o projeto está organizado</button>
-        </div>
-        <div id="plan" class="plan" hidden>
-          <p id="plan-status" class="plan__status"></p>
-          <ol id="plan-steps" class="plan__steps"></ol>
-          <p id="plan-summary" class="plan__summary" hidden></p>
-        </div>
-      </section>
-
-      <section id="desk" class="desk" hidden>
-        <h2 id="desk-name"></h2>
-        <div id="stress" class="stress">
-          <div class="stress__head">
-            <span>Estresse</span>
-            <strong id="stress-label"></strong>
-          </div>
-          <div id="stress-bar" class="stress__bar" role="meter" aria-valuemin="0" aria-valuemax="100"></div>
-          <p id="stress-detail" class="hint"></p>
-        </div>
-        <p id="desk-activity" class="desk__activity"></p>
-        <dl id="desk-toolkit" class="toolkit"></dl>
-        <form id="task-form" class="task">
-          <label for="task" id="task-label">Tarefa</label>
-          <p id="desk-lobby" class="hint" hidden>
-            Nenhum projeto aberto: dá para conversar e ver o status do agente, mas ele não mexe em arquivos.
-          </p>
-          <textarea id="task" rows="3"></textarea>
-          <div class="task__actions">
-            <button type="submit" id="send">Mandar tarefa</button>
-            <button type="button" id="stop" class="ghost">Parar</button>
-          </div>
-        </form>
-        <p id="watch-only" class="hint" hidden>
-          O escritório só acompanha o Antigravity. Para dar uma tarefa, abra o Antigravity.
-        </p>
-      </section>
-
-      <section class="terminal" aria-label="Precisa do terminal">
-        <ul id="terminal"></ul>
-      </section>
-
-      <section class="notes" aria-label="Pedidos de permissão">
-        <ul id="notes"></ul>
-      </section>
-
-      <section class="log">
-        <div class="log__head">
-          <h2>Registro</h2>
-          <label class="log__filter"><input type="checkbox" id="only-selected" /> Só da mesa escolhida</label>
-        </div>
-        <ol id="log"></ol>
-      </section>
+      </div>
 
       <div id="toast" class="toast" role="status" hidden></div>
     </aside>

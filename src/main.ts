@@ -98,12 +98,12 @@ function connect() {
   const badge = $('connection');
   ws.onopen = () => {
     socket = ws;
-    badge.textContent = 'conectado';
+    badge.querySelector('span')!.textContent = 'conectado';
     badge.classList.add('is-on');
   };
   ws.onclose = () => {
     socket = undefined;
-    badge.textContent = 'desconectado';
+    badge.querySelector('span')!.textContent = 'desconectado';
     badge.classList.remove('is-on');
     setTimeout(connect, 2000);
   };
@@ -126,6 +126,7 @@ function receive(msg: ServerMessage) {
       if (!state.selectedId || !agentById(state.selectedId)) state.selectedId = msg.agents[0]?.id;
       scene.doneCount = msg.log.filter((e) => e.kind === 'result').length;
       $<HTMLInputElement>('project').value = msg.project;
+      renderProject();
       renderAll();
       redraw();
       // localhost:4321/#configuracoes opens straight into the team settings
@@ -223,6 +224,7 @@ function receive(msg: ServerMessage) {
     case 'project':
       state.project = msg.project;
       $<HTMLInputElement>('project').value = msg.project;
+      renderProject();
       renderDesk();
       toast(`Projeto: ${msg.project}`);
       break;
@@ -326,6 +328,23 @@ function renderStress(agent: AgentView) {
   $('stress-detail').textContent = detail;
 }
 
+/** A small ten-block stress meter for the team cards. */
+function miniStress(stress: Stress) {
+  const row = el('span', 'card__stress');
+  const meter = el('span', 'card__meter');
+  const lit = stress.level === 'sem-dados' ? 0 : Math.max(1, Math.round(stress.value * 10));
+  meter.append(
+    ...Array.from({ length: 10 }, (_, i) => {
+      const block = el('i');
+      if (i < lit) block.style.background = stressColor((i + 1) / 10);
+      return block;
+    }),
+  );
+  meter.setAttribute('aria-hidden', 'true');
+  row.append(meter, `estresse: ${STRESS_TEXT[stress.level].toLowerCase()}`);
+  return row;
+}
+
 function renderTeam() {
   scene.agents = state.agents.slice(0, DESKS.length);
   scene.selectedId = state.selectedId;
@@ -353,6 +372,8 @@ function renderTeam() {
       status.dataset.status = limited ? 'error' : agent.status;
 
       card.append(frame, body, status);
+      const stress = stressFor(agent);
+      if (stress) card.append(miniStress(stress));
       li.append(card);
       return li;
     }),
@@ -443,9 +464,9 @@ function renderUsage() {
       if (quota.resetsAt) details.push(`${quota.status === 'limited' ? 'volta' : 'renova'} ${clock(quota.resetsAt)}`);
       if (!details.length) {
         details.push(
-          account === 'codex'
-            ? 'O Codex só avisa quando bate o limite.'
-            : 'Aparece quando um agente Claude trabalhar.',
+          account === 'claude'
+            ? 'Aparece quando um agente Claude trabalhar.'
+            : `O ${account === 'codex' ? 'Codex' : 'Gemini'} só avisa quando bate o limite.`,
         );
       }
       li.append(el('p', 'quota__detail', details.join(' · ')));
@@ -513,17 +534,43 @@ function formatTokens(n: number) {
 /** Plan steps the user expanded, kept open across re-renders. */
 const openSteps = new Set<number>();
 
+/** Coordinator portrait, an arrow, then whoever takes the steps: the order a command travels. */
+function renderCrewLine(coordinator: AgentView | undefined) {
+  const workers = state.agents.filter((a) => a.roleKey === 'executor' || a.roleKey === 'revisor');
+  const face = (agent: AgentView) => {
+    const span = el('span', 'crew-face');
+    span.title = `${agent.name}: ${ROLE_NAMES[agent.roleKey ?? 'folga'] ?? ''}`;
+    span.dataset.status = agent.status;
+    span.append(portrait(agent));
+    return span;
+  };
+  const line = $('command-crew');
+  if (!coordinator) return line.replaceChildren();
+  line.replaceChildren(face(coordinator), el('span', 'crew-arrow', '›'), ...workers.map(face));
+}
+
+function renderProject() {
+  const path = state.project;
+  $('project-name').textContent = path ? (path.split(/[\/]/).filter(Boolean).pop() ?? path) : 'Nenhum projeto aberto';
+  $('project-path').textContent = path || 'Os agentes só conversam até você escolher uma pasta.';
+  $('project-change').textContent = path ? 'Trocar' : 'Escolher';
+  $('project-edit').hidden = true;
+  $('project-view').hidden = false;
+}
+
 function renderCommand() {
   const coordinator = state.agents.find((a) => a.roleKey === 'coordenador');
   const workers = state.agents.filter((a) => a.roleKey === 'executor' || a.roleKey === 'revisor').map((a) => a.name);
   $('command-hint').textContent = coordinator
     ? `${coordinator.name} monta a ordem e passa cada parte para ${workers.join(', ') || 'a equipe'}.`
-    : 'Escolha um coordenador em Configurações.';
+    : 'Escolha um coordenador em Equipe.';
+  renderCrewLine(coordinator);
 
   const plan = state.plan;
   const running = plan?.status === 'planning' || plan?.status === 'running';
   $<HTMLButtonElement>('send-command').disabled = running || !coordinator;
   $('stop-plan').hidden = !running;
+  updateIdeas();
 
   const box = $('plan');
   box.hidden = !plan;
@@ -1031,7 +1078,57 @@ function submitOnCtrlEnter(fieldId: string, formId: string) {
   });
 }
 submitOnCtrlEnter('task', 'task-form');
-submitOnCtrlEnter('command', 'command-form');
+// The general command reads like a chat box: Enter sends, Shift + Enter starts a new line.
+const commandField = $<HTMLTextAreaElement>('command');
+commandField.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+    event.preventDefault();
+    $<HTMLFormElement>('command-form').requestSubmit();
+  }
+});
+function growCommand() {
+  commandField.style.height = 'auto';
+  commandField.style.height = `${Math.min(commandField.scrollHeight + 2, 220)}px`;
+  updateIdeas();
+}
+commandField.addEventListener('input', growCommand);
+
+/** Ready-made commands, shown only while the box is empty and nothing is running. */
+function updateIdeas() {
+  const running = state.plan?.status === 'planning' || state.plan?.status === 'running';
+  $('command-ideas').hidden = running || commandField.value.trim() !== '';
+}
+for (const idea of document.querySelectorAll<HTMLButtonElement>('.idea')) {
+  idea.addEventListener('click', () => {
+    commandField.value = idea.textContent ?? '';
+    growCommand();
+    commandField.focus();
+  });
+}
+
+// The team drawer on the left opens and closes from its tab; the choice is remembered.
+const DRAWER_KEY = 'virtualof.equipe-aberta';
+function setDrawer(open: boolean) {
+  $('drawer').classList.toggle('is-closed', !open);
+  $('drawer-tab').setAttribute('aria-expanded', String(open));
+  try {
+    localStorage.setItem(DRAWER_KEY, open ? '1' : '0');
+  } catch {
+    // Storage can be off in private windows; the drawer just opens next time.
+  }
+}
+try {
+  if (localStorage.getItem(DRAWER_KEY) === '0') setDrawer(false);
+} catch {
+  // Same as above.
+}
+$('drawer-tab').addEventListener('click', () => setDrawer($('drawer').classList.contains('is-closed')));
+
+$('project-change').addEventListener('click', () => {
+  $('project-view').hidden = true;
+  $('project-edit').hidden = false;
+  $<HTMLInputElement>('project').focus();
+});
 
 $('task-form').addEventListener('submit', (event) => {
   event.preventDefault();
@@ -1047,6 +1144,7 @@ $('command-form').addEventListener('submit', (event) => {
   if (!field.value.trim()) return;
   send({ type: 'command', prompt: field.value });
   field.value = '';
+  growCommand();
 });
 
 $('stop-plan').addEventListener('click', () => send({ type: 'stop-plan' }));

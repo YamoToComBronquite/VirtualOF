@@ -27,7 +27,7 @@ The interface is in Portuguese (Brazil).
 - Node.js 22 or newer
 - A Claude account signed in to Claude Code on this machine (the CLI or the IDE extension), or an `ANTHROPIC_API_KEY`
 - For the Codex reviewer: a ChatGPT account. Sign in once with `npx codex login` from the project folder
-- For the Gemini agent: the [Antigravity CLI](https://antigravity.google/docs/getting-started) (`agy`), signed in with your Google account (it shares the Antigravity IDE login). If it is missing, the office shows the install command
+- For the Gemini agent: the [Antigravity CLI](https://antigravity.google/docs/getting-started) (`agy`), signed in with your Google account (run `agy` once in a terminal; it has its own login, separate from the IDE). If it is missing, the office shows the install command
 - Optional: [Antigravity](https://antigravity.google), if you want to see its IDE conversations in the office
 
 Agents run on your own subscriptions and count against their usual limits. Several agents working at once use those limits up faster.

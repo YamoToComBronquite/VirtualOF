@@ -25,7 +25,7 @@ Um escritório virtual em pixel art para os seus agentes de IA. Você passa tare
 - Node.js 22 ou mais novo
 - Uma conta do Claude logada no Claude Code neste computador (CLI ou extensão da IDE), ou uma `ANTHROPIC_API_KEY`
 - Para o revisor Codex: uma conta do ChatGPT. Faça login uma vez com `npx codex login` dentro da pasta do projeto
-- Para o agente Gemini: o [Antigravity CLI](https://antigravity.google/docs/getting-started) (`agy`), logado com sua conta do Google (usa o mesmo login do Antigravity IDE). Se faltar, o escritório mostra o comando de instalação
+- Para o agente Gemini: o [Antigravity CLI](https://antigravity.google/docs/getting-started) (`agy`), logado com sua conta do Google (rode `agy` uma vez num terminal; o login é separado do IDE). Se faltar, o escritório mostra o comando de instalação
 - Opcional: o [Antigravity](https://antigravity.google), para ver as conversas do IDE no escritório
 
 Os agentes usam as suas próprias assinaturas e gastam os limites de sempre. Vários agentes trabalhando ao mesmo tempo gastam esses limites mais rápido.

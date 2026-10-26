@@ -49,14 +49,16 @@ textarea {
 /* ---------- Office ---------- */
 
 .office {
-  position: relative;
+  display: flex;
+  flex-direction: column;
   min-width: 0;
   min-height: 0;
 }
 
 .office__stage {
-  position: absolute;
-  inset: 0;
+  position: relative;
+  flex: 1;
+  min-height: 0;
 }
 
 #scene {
@@ -1225,4 +1227,50 @@ select {
   .note {
     animation: none;
   }
+}
+
+/* The PowerShell dock under the office */
+
+.shell {
+  display: flex;
+  flex-direction: column;
+  height: 38vh;
+  min-height: 180px;
+  background: #0b0f0b;
+  border-top: 1px solid #2f5a35;
+}
+
+.shell__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  border-bottom: 1px solid #1c2e1e;
+}
+
+.shell__head h2 {
+  margin: 0;
+  font: 700 14px var(--pixel);
+  color: #5fd86f;
+}
+
+.shell__cwd {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.shell__screen {
+  flex: 1;
+  min-height: 0;
+  padding: 6px 0 0 10px;
+}
+
+#open-shell[aria-pressed='true'] {
+  border-color: #5fd86f;
+  color: #5fd86f;
 }

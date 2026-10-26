@@ -14,14 +14,26 @@
   </head>
   <body>
     <main class="office">
-      <div class="office__stage"><canvas id="scene" aria-label="Escritório com os agentes nas mesas"></canvas></div>
-      <p class="office__hint">Clique numa mesa para falar direto com quem está sentado nela.</p>
+      <div class="office__stage">
+        <canvas id="scene" aria-label="Escritório com os agentes nas mesas"></canvas>
+        <p class="office__hint">Clique numa mesa para falar direto com quem está sentado nela.</p>
+      </div>
+      <section id="shell" class="shell" aria-labelledby="shell-title" hidden>
+        <header class="shell__head">
+          <h2 id="shell-title">PowerShell</h2>
+          <span id="shell-cwd" class="shell__cwd"></span>
+          <button type="button" id="shell-restart" class="ghost small">Reiniciar</button>
+          <button type="button" id="shell-close" class="ghost small" aria-label="Fechar o PowerShell">Fechar</button>
+        </header>
+        <div id="shell-screen" class="shell__screen"></div>
+      </section>
     </main>
 
     <aside class="panel">
       <header class="panel__head">
         <h1>Turno da Noite</h1>
         <span id="connection" class="connection">conectando…</span>
+        <button type="button" id="open-shell" class="ghost small" title="Ctrl + '">PowerShell</button>
         <button type="button" id="open-ambiente" class="ghost small">Ambiente</button>
         <button type="button" id="open-skills" class="ghost small">Skills</button>
         <button type="button" id="open-settings" class="ghost small">Configurações</button>

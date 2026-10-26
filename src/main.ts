@@ -16,6 +16,7 @@ import {
   type ServerMessage,
   type TerminalAlert,
 } from '../shared/types.ts';
+import { ShellDock } from './shell.ts';
 import { DEFAULT_THEME, DESKS, Scene, paintCharacter, stressColor, type Stress, type Theme } from './scene.ts';
 
 const STATUS_TEXT: Record<AgentStatus, string> = {
@@ -56,6 +57,9 @@ const state = {
 
 const scene = new Scene($<HTMLCanvasElement>('scene'));
 let socket: WebSocket | undefined;
+const shell = new ShellDock($('shell'), $('shell-screen'), $('shell-cwd'), (msg) => send(msg), () => {
+  $('open-shell').setAttribute('aria-pressed', String(shell.visible));
+});
 
 function send(msg: ClientMessage) {
   socket?.send(JSON.stringify(msg));
@@ -109,6 +113,7 @@ function connect() {
 function receive(msg: ServerMessage) {
   switch (msg.type) {
     case 'snapshot':
+      shell.clear();
       state.agents = msg.agents;
       state.log = msg.log;
       state.permissions = msg.permissions;
@@ -165,6 +170,12 @@ function receive(msg: ServerMessage) {
       state.terminal.push(msg.alert);
       renderTerminal();
       notify(`${agentName(msg.alert.agentId)} precisa do terminal`, msg.alert.reason);
+      break;
+    case 'shell-output':
+      shell.output(msg.data);
+      break;
+    case 'shell-state':
+      shell.state(msg.running, msg.cwd);
       break;
     case 'terminal-cleared':
       state.terminal = state.terminal.filter((t) => t.id !== msg.id);
@@ -556,7 +567,10 @@ function renderTerminal() {
   $('terminal').replaceChildren(
     ...state.terminal.map((alert) => {
       const li = el('li', 'term');
-      const copy = el('button', undefined, 'Copiar comando');
+      const run = el('button', undefined, 'Rodar no PowerShell');
+      run.type = 'button';
+      run.addEventListener('click', () => shell.run(alert.command));
+      const copy = el('button', 'ghost', 'Copiar');
       copy.type = 'button';
       copy.addEventListener('click', async () => {
         await navigator.clipboard.writeText(alert.command);
@@ -572,9 +586,9 @@ function renderTerminal() {
         }
       });
       const actions = el('div', 'term__actions');
-      actions.append(copy, done);
+      actions.append(run, copy, done);
       li.append(
-        el('h3', undefined, 'Abra o terminal'),
+        el('h3', undefined, 'Precisa do terminal'),
         el('p', undefined, `${agentName(alert.agentId)}: ${alert.reason}`),
         el('code', undefined, alert.command),
         actions,
@@ -1078,7 +1092,18 @@ function redraw() {
   scene.draw(performance.now());
 }
 
-window.addEventListener('resize', redraw);
+// The stage shrinks when the PowerShell dock opens, not only when the window resizes.
+new ResizeObserver(redraw).observe($('scene').parentElement!);
+
+$('open-shell').addEventListener('click', () => shell.toggle());
+$('shell-close').addEventListener('click', () => shell.hide());
+$('shell-restart').addEventListener('click', () => shell.restart());
+document.addEventListener('keydown', (event) => {
+  if (event.ctrlKey && (event.key === "'" || event.code === 'Backquote')) {
+    event.preventDefault();
+    shell.toggle();
+  }
+});
 redraw();
 document.fonts.ready.then(redraw);
 requestAnimationFrame(frame);

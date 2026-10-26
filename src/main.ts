@@ -185,6 +185,7 @@ function receive(msg: ServerMessage) {
     case 'project':
       state.project = msg.project;
       $<HTMLInputElement>('project').value = msg.project;
+      renderDesk();
       toast(`Projeto: ${msg.project}`);
       break;
     case 'notice':
@@ -335,7 +336,8 @@ function renderDesk() {
   renderToolkit(agent);
   $('task-form').hidden = !agent.controllable;
   $('watch-only').hidden = agent.controllable;
-  $('task-label').textContent = `O que ${agent.name} deve fazer?`;
+  $('task-label').textContent = state.project ? `O que ${agent.name} deve fazer?` : `Mensagem para ${agent.name}`;
+  $('desk-lobby').hidden = !!state.project;
   const busy = BUSY.includes(agent.status);
   $<HTMLButtonElement>('send').disabled = busy;
   $<HTMLButtonElement>('stop').disabled = !busy;

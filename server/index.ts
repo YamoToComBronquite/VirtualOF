@@ -1,7 +1,8 @@
 import { spawn } from 'node:child_process';
-import { existsSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
-import { isAbsolute, resolve } from 'node:path';
+import { homedir } from 'node:os';
+import { isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer as createVite } from 'vite';
 import { WebSocketServer, type WebSocket } from 'ws';
@@ -21,6 +22,13 @@ const team = new Team(config, office);
 const orchestrator = new Orchestrator(office, team);
 watchAntigravity(config.antigravity, office);
 
+/** Where agents work when no project is open: an empty folder of their own. */
+const LOBBY = join(homedir(), '.virtualof', 'sala');
+mkdirSync(LOBBY, { recursive: true });
+const LOBBY_NOTE =
+  '[Aviso do escritório: o usuário ainda não abriu nenhum projeto. Você está numa pasta vazia, só para conversar ' +
+  'e mostrar que está funcionando. Responda normalmente, mas não crie, altere nem apague arquivos.]';
+
 function isFolder(path: string) {
   return isAbsolute(path) && existsSync(path) && statSync(path).isDirectory();
 }
@@ -38,10 +46,14 @@ function handle(msg: ClientMessage) {
           `${member.config.nome} está sem limite de uso agora (veja em Consumo).` + (cover ? ` ${cover.config.nome} está livre para essa tarefa.` : ''),
         );
       }
-      if (!isFolder(office.project)) return office.notice('Escolha a pasta do projeto antes de mandar uma tarefa.');
       if (orchestrator.running) return office.notice('Tem um comando geral em andamento. Pare o plano para falar direto com um agente.');
       if (runner.busy) return office.notice('Esse agente ainda está numa tarefa. Espere terminar ou clique em Parar.');
-      void runner.run(prompt, office.project);
+      if (isFolder(office.project)) {
+        void runner.run(prompt, office.project);
+      } else {
+        // No project yet: chat from an empty folder, just to see the agent respond and its status.
+        void runner.run(prompt, LOBBY, LOBBY_NOTE);
+      }
       return;
     }
     case 'stop':

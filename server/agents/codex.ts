@@ -49,9 +49,9 @@ export class CodexAgent implements Runner {
     this.thread = undefined;
   }
 
-  async run(prompt: string, cwd: string): Promise<RunOutcome> {
+  async run(prompt: string, cwd: string, note?: string): Promise<RunOutcome> {
     const { id } = this;
-    let input = prompt;
+    let input = note ? `${prompt}\n\n${note}` : prompt;
     const role = this.brief();
     // The sandbox is fixed per thread, so a role change (even a temporary one) needs a new thread.
     if (!this.thread || this.threadCwd !== cwd || this.threadRole !== role.key) {
@@ -64,7 +64,7 @@ export class CodexAgent implements Runner {
       });
       this.threadCwd = cwd;
       // The SDK has no system prompt, so the role goes in front of the first message.
-      input = `${role.instructions}\n\n${TERMINAL_RULE}\n\n${prompt}`;
+      input = `${role.instructions}\n\n${TERMINAL_RULE}\n\n${input}`;
     }
     this.abort = new AbortController();
     this.outcome = { ok: false, text: '' };

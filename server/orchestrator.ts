@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { Plan } from '../shared/types.ts';
+import { ROLE_NAMES, type Plan } from '../shared/types.ts';
 import type { RunOutcome } from './agents/runner.ts';
 import type { Office } from './office.ts';
 import type { Member, Team } from './team.ts';
@@ -63,7 +63,7 @@ export class Orchestrator {
     const coordinator = this.team.coordinator();
     if (!coordinator) return this.office.notice('Escolha um coordenador em Configurações.');
     const workers = this.team.workers();
-    if (!workers.some((w) => w.config.papel === 'executor')) return this.office.notice('A equipe precisa de pelo menos um executor.');
+    if (!workers.some((w) => w.config.papel === 'executor')) return this.office.notice('A equipe precisa de pelo menos um fullstack.');
     if (this.team.busy) return this.office.notice('Espere os agentes terminarem a tarefa atual.');
 
     this.stopped = false;
@@ -190,8 +190,15 @@ export class Orchestrator {
   private planningPrompt(command: string, workers: Member[]) {
     const roster = workers
       .map((w) => {
-        const can = w.config.papel === 'executor' ? 'edita arquivos e roda comandos' : 'só lê e aponta problemas, não edita';
-        return `- id "${w.config.id}": ${this.team.label(w)}, ${w.config.papel} (${can})`;
+        const can = {
+          coordenador: '',
+          designer: 'cuida da interface e da experiência de uso (UI/UX), edita arquivos',
+          executor: 'fullstack: programa front e back, edita arquivos e roda comandos',
+          tester: 'escreve e roda testes, edita arquivos de teste',
+          revisor: 'só lê e aponta problemas, não edita',
+          folga: '',
+        }[w.config.papel];
+        return `- id "${w.config.id}": ${this.team.label(w)}, ${ROLE_NAMES[w.config.papel]} (${can})`;
       })
       .join('\n');
     return [

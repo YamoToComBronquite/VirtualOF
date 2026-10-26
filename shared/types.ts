@@ -3,11 +3,19 @@
 export type AgentKind = 'claude' | 'codex' | 'antigravity';
 
 /** Job an agent has on the team; 'folga' means it sits out of general commands. */
-export type RoleKey = 'coordenador' | 'executor' | 'revisor' | 'folga';
+export type RoleKey = 'coordenador' | 'designer' | 'executor' | 'tester' | 'revisor' | 'folga';
+
+/** Roles whose agents change files; the reviewer only reads. ('executor' is the fullstack developer.) */
+export const EDITING_ROLES: RoleKey[] = ['designer', 'executor', 'tester'];
+
+/** Roles that take steps of a general command. */
+export const WORKER_ROLES: RoleKey[] = [...EDITING_ROLES, 'revisor'];
 
 export const ROLE_NAMES: Record<RoleKey, string> = {
-  coordenador: 'Coordenador',
-  executor: 'Executor',
+  coordenador: 'Supervisor',
+  designer: 'UI/UX Designer',
+  executor: 'Fullstack',
+  tester: 'Tester',
   revisor: 'Revisor',
   folga: 'De folga',
 };

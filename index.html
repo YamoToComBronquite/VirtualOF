@@ -150,7 +150,10 @@
         <form id="command-form" class="composer">
           <div class="composer__to">
             <span id="targets-label">Para</span>
-            <div id="targets" class="targets" role="radiogroup" aria-labelledby="targets-label"></div>
+            <div class="picker">
+              <button type="button" id="target-button" class="picker__button" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="targets-label target-button"></button>
+              <ul id="targets" class="picker__list" role="listbox" aria-labelledby="targets-label" hidden></ul>
+            </div>
           </div>
           <label for="command" class="visually-hidden">Mensagem</label>
           <textarea id="command" rows="2" placeholder="O que a equipe deve fazer?"></textarea>
@@ -173,7 +176,7 @@
       <form method="dialog" id="settings-form">
         <h2 id="settings-title">Configurações da equipe</h2>
         <p class="hint">
-          Escolha o papel de cada um e a ordem das mesas. Precisa de um coordenador e pelo menos um executor.
+          Escolha o papel de cada um e a ordem das mesas. Precisa de um supervisor e pelo menos um fullstack.
         </p>
         <ol id="settings-team" class="settings__team"></ol>
         <fieldset class="choice choice--lang">

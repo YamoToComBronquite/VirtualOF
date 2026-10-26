@@ -3,12 +3,20 @@
   "projeto": "",
   "papeis": {
     "coordenador": {
-      "nome": "Coordenador",
-      "instrucoes": "Você é o coordenador deste escritório. Você planeja e acompanha; quem faz são os outros agentes. Não edite arquivos. Siga o AGENTS.md se existir."
+      "nome": "Supervisor",
+      "instrucoes": "Você é o supervisor deste escritório. Você planeja, divide o trabalho entre a equipe e acompanha; quem faz são os outros agentes. Não edite arquivos. Siga o AGENTS.md se existir."
+    },
+    "designer": {
+      "nome": "UI/UX Designer",
+      "instrucoes": "Você é o designer de UI/UX deste escritório. Cuide da interface e da experiência de uso: layout, cores, tipografia, estados vazios e de erro, acessibilidade e textos da tela. Mexa só no que a tarefa pede e diga no fim, em poucas linhas, o que mudou. Siga o AGENTS.md se existir."
     },
     "executor": {
-      "nome": "Executor",
-      "instrucoes": "Você é um executor deste escritório. Faça a tarefa que recebeu mexendo só no que ela pede e diga no fim, em poucas linhas, o que mudou. Siga o AGENTS.md se existir."
+      "nome": "Fullstack",
+      "instrucoes": "Você é um desenvolvedor fullstack deste escritório. Faça a tarefa que recebeu, no front ou no back, mexendo só no que ela pede, e diga no fim, em poucas linhas, o que mudou. Siga o AGENTS.md se existir."
+    },
+    "tester": {
+      "nome": "Tester",
+      "instrucoes": "Você é o tester deste escritório. Escreva e rode os testes do que foi pedido, incluindo casos de erro e de borda. Não corrija o código do produto: se um teste falhar, diga qual, com arquivo e linha, e o que esperava. Siga o AGENTS.md se existir."
     },
     "revisor": {
       "nome": "Revisor",
@@ -24,6 +32,13 @@
       "cor": "#e3a04f"
     },
     {
+      "id": "gemini",
+      "nome": "Gemini",
+      "tipo": "antigravity",
+      "papel": "designer",
+      "cor": "#6f8cf0"
+    },
+    {
       "id": "dev",
       "nome": "Claude Dev",
       "tipo": "claude",
@@ -31,25 +46,25 @@
       "cor": "#d9705a"
     },
     {
-      "id": "revisor",
-      "nome": "Codex",
-      "tipo": "codex",
-      "papel": "revisor",
-      "cor": "#4fb3a5"
-    },
-    {
-      "id": "gemini",
-      "nome": "Gemini",
-      "tipo": "antigravity",
-      "papel": "folga",
-      "cor": "#6f8cf0"
-    },
-    {
       "id": "astra",
       "nome": "Astra",
       "tipo": "codex",
-      "papel": "folga",
+      "papel": "executor",
       "cor": "#5fbf8f"
+    },
+    {
+      "id": "revisor",
+      "nome": "Codex",
+      "tipo": "codex",
+      "papel": "tester",
+      "cor": "#4fb3a5"
+    },
+    {
+      "id": "critico",
+      "nome": "Claude Revisor",
+      "tipo": "claude",
+      "papel": "revisor",
+      "cor": "#c98bd9"
     }
   ],
   "antigravity": {

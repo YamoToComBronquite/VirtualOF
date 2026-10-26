@@ -1,5 +1,6 @@
 import { Codex, type Thread, type ThreadEvent, type ThreadItem } from '@openai/codex-sdk';
 import { basename } from 'node:path';
+import { EDITING_ROLES } from '../../shared/types.ts';
 import { TERMINAL_RULE, type Office } from '../office.ts';
 import { codexBinary, packagedCodex } from './binaries.ts';
 import { clip } from './describe.ts';
@@ -66,7 +67,7 @@ export class CodexAgent implements Runner {
       this.thread = this.codex.startThread({
         workingDirectory: cwd,
         skipGitRepoCheck: true,
-        sandboxMode: role.key === 'executor' ? 'workspace-write' : 'read-only',
+        sandboxMode: EDITING_ROLES.includes(role.key) ? 'workspace-write' : 'read-only',
         model: role.model || undefined,
         approvalPolicy: 'never',
       });

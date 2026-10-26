@@ -105,6 +105,10 @@ const EXACT: Record<string, string> = {
   Executor: 'Executor',
   Revisor: 'Reviewer',
   'De folga': 'Off duty',
+  Supervisor: 'Supervisor',
+  'UI/UX Designer': 'UI/UX Designer',
+  Fullstack: 'Fullstack',
+  Tester: 'Tester',
 
   // Team drawer, stress and usage
   'Mostrar ou esconder a equipe': 'Show or hide the team',
@@ -162,8 +166,8 @@ const EXACT: Record<string, string> = {
 
   // Settings
   'Configurações da equipe': 'Team settings',
-  'Escolha o papel de cada um e a ordem das mesas. Precisa de um coordenador e pelo menos um executor.':
-    'Choose each role and the desk order. You need one coordinator and at least one executor.',
+  'Escolha o papel de cada um e a ordem das mesas. Precisa de um supervisor e pelo menos um fullstack.':
+    'Choose each role and the desk order. You need one supervisor and at least one fullstack.',
   'Quando uma conta bater o limite de uso, passar a tarefa para um agente de outra conta':
     'When an account hits its usage limit, hand the task to an agent on another account',
   'Agentes da mesma conta batem o limite juntos, então quem cobre é sempre de outra conta: Claude, ChatGPT ou Google.':
@@ -174,6 +178,10 @@ const EXACT: Record<string, string> = {
   'O escritório não mandou a equipe. Feche e abra o escritório de novo.': "The office didn't send the team. Close and reopen the office.",
   'Escolha exatamente um coordenador.': 'Choose exactly one coordinator.',
   'Escolha pelo menos um executor.': 'Choose at least one executor.',
+  'Escolha exatamente um supervisor.': 'Choose exactly one supervisor.',
+  'Escolha pelo menos um fullstack.': 'Choose at least one fullstack.',
+  'A equipe precisa de pelo menos um fullstack.': 'The team needs at least one fullstack.',
+  'Comando geral': 'General command',
   'Como executor, o Codex edita arquivos sem post-it de permissão.': 'As an executor, Codex edits files without a permission note.',
   'O Gemini edita arquivos do projeto sem post-it; comandos de terminal ficam bloqueados.':
     'Gemini edits project files without a permission note; terminal commands stay blocked.',

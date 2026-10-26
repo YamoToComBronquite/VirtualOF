@@ -11,7 +11,7 @@ import { loadModels } from './models.ts';
 import { Office } from './office.ts';
 import { Orchestrator } from './orchestrator.ts';
 import { Shell } from './shell.ts';
-import { importSkill, listSkills, SKILL_DIRS } from './skills.ts';
+import { importSkill, listSkills, shareSkills } from './skills.ts';
 import { Team } from './team.ts';
 
 const HOST = '127.0.0.1';
@@ -115,10 +115,15 @@ export async function startOffice(options: OfficeOptions) {
         office.publish({ type: 'skills', skills: listSkills() });
         return;
       case 'import-skill': {
-        const targets = msg.targets.filter((t) => t in SKILL_DIRS);
-        const result = importSkill(msg.files, targets);
+        const result = importSkill(msg.files);
         office.publish({ type: 'skill-imported', ...result });
         if (result.ok) office.publish({ type: 'skills', skills: listSkills() });
+        return;
+      }
+      case 'share-skills': {
+        const result = shareSkills();
+        office.publish({ type: 'skill-imported', ...result });
+        office.publish({ type: 'skills', skills: listSkills() });
         return;
       }
       case 'team': {

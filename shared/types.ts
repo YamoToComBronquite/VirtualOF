@@ -181,6 +181,7 @@ export type ClientMessage =
   | { type: 'command'; prompt: string }
   | { type: 'team'; team: MemberSettings[]; autoSwitch: boolean }
   | { type: 'list-skills' }
-  | { type: 'import-skill'; files: SkillFile[]; targets: Account[] }
+  | { type: 'import-skill'; files: SkillFile[] }
+  | { type: 'share-skills' }
   | { type: 'stop-plan' }
   | { type: 'project'; path: string };

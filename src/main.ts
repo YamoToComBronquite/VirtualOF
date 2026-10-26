@@ -999,20 +999,35 @@ const SKILL_OWNERS: Record<Account, string> = { claude: 'Claude', codex: 'Codex'
 const SKILL_LIMIT_BYTES = 10 * 1024 * 1024;
 let pendingSkill: SkillFile[] | null = null;
 
+/** One list for the whole office: each skill once, with a note when some agents still miss it. */
 function renderSkills(skills: SkillCatalog) {
+  const accounts = Object.keys(SKILL_OWNERS) as Account[];
+  const byName = new Map<string, { description: string; has: Set<Account> }>();
+  for (const account of accounts) {
+    for (const skill of skills[account]) {
+      const entry = byName.get(skill.name) ?? { description: skill.description, has: new Set<Account>() };
+      entry.has.add(account);
+      byName.set(skill.name, entry);
+    }
+  }
+  const names = [...byName.keys()].sort((a, b) => a.localeCompare(b));
+  const missing = names.filter((name) => byName.get(name)!.has.size < accounts.length).length;
+
+  $('skills-count').textContent = names.length
+    ? `${names.length} ${names.length === 1 ? 'skill' : 'skills'}, para todos os agentes`
+    : 'Nenhuma skill ainda. Importe a primeira abaixo.';
+  $('skills-missing').hidden = !missing;
+  $('skills-missing-text').textContent = `${missing} ${missing === 1 ? 'skill está' : 'skills estão'} só com parte dos agentes.`;
+
   $('skills-installed').replaceChildren(
-    ...(Object.keys(SKILL_OWNERS) as Account[]).map((account) => {
-      const group = el('section', 'skills__group');
-      group.append(el('h3', 'skills__owner', `${SKILL_OWNERS[account]} · ${skills[account].length}`));
-      const list = el('ul', 'skills__list');
-      if (!skills[account].length) list.append(el('li', 'hint', 'Nenhuma skill sua ainda.'));
-      for (const skill of skills[account]) {
-        const item = el('li', 'skills__chip', skill.name);
-        item.title = skill.description;
-        list.append(item);
-      }
-      group.append(list);
-      return group;
+    ...names.map((name) => {
+      const { description, has } = byName.get(name)!;
+      const li = el('li', 'skill');
+      li.append(el('strong', 'skill__name', name), el('span', 'skill__desc', description));
+      const lacking = accounts.filter((a) => !has.has(a));
+      if (lacking.length) li.append(el('span', 'skill__lacking', `falta em ${lacking.map((a) => SKILL_OWNERS[a]).join(', ')}`));
+      li.title = description;
+      return li;
     }),
   );
 }
@@ -1079,12 +1094,12 @@ $('open-skills').addEventListener('click', () => {
   send({ type: 'list-skills' });
   $<HTMLDialogElement>('skills').showModal();
 });
+$('skills-share').addEventListener('click', () => send({ type: 'share-skills' }));
 $('skill-folder').addEventListener('change', (e) => void pickSkill(e.target as HTMLInputElement, true));
 $('skill-file').addEventListener('change', (e) => void pickSkill(e.target as HTMLInputElement, false));
 $('skill-import').addEventListener('click', () => {
   if (!pendingSkill) return;
-  const targets = [...document.querySelectorAll<HTMLInputElement>('.skills__targets input:checked')].map((i) => i.value as Account);
-  send({ type: 'import-skill', files: pendingSkill, targets });
+  send({ type: 'import-skill', files: pendingSkill });
   $<HTMLButtonElement>('skill-import').disabled = true;
 });
 

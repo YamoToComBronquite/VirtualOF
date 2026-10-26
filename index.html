@@ -248,8 +248,14 @@
         <h2 id="skills-title">Skills</h2>
         <p class="hint">
           Uma skill ensina os agentes a fazer algo específico. É uma pasta com um arquivo SKILL.md e, às vezes, scripts.
+          Toda skill vale para a equipe inteira, inclusive para quem entrar depois.
         </p>
-        <div id="skills-installed" class="skills__installed"></div>
+        <p id="skills-count" class="skills__count"></p>
+        <ul id="skills-installed" class="skills__installed"></ul>
+        <div id="skills-missing" class="skills__missing" hidden>
+          <span id="skills-missing-text"></span>
+          <button type="button" id="skills-share" class="small">Passar para todos</button>
+        </div>
 
         <h3 class="skills__heading">Importar skill</h3>
         <div class="skills__pick">
@@ -269,13 +275,7 @@
           <p class="member__warn">
             Skills podem trazer scripts que os agentes executam no seu computador. Importe só skills de quem você confia.
           </p>
-          <fieldset class="skills__targets">
-            <legend>Instalar para</legend>
-            <label><input type="checkbox" value="claude" checked /> Claude</label>
-            <label><input type="checkbox" value="codex" checked /> Codex</label>
-            <label><input type="checkbox" value="antigravity" checked /> Gemini</label>
-          </fieldset>
-          <button type="button" id="skill-import">Importar skill</button>
+          <button type="button" id="skill-import">Importar para todos os agentes</button>
         </div>
         <p id="skill-result" class="skills__result" hidden></p>
 

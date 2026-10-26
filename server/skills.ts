@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, normalize, sep } from 'node:path';
 import type { Account, SkillCatalog, SkillFile, SkillInfo } from '../shared/types.ts';
@@ -41,13 +41,37 @@ export function listSkills(): SkillCatalog {
   return catalog;
 }
 
+const ALL = Object.keys(SKILL_DIRS) as Account[];
+
 /**
- * Installs an uploaded skill folder into each chosen tool's skills folder. Paths are checked so
+ * Skills are shared by the whole office: every agent runs on one of these tools, so a skill
+ * that sits in all three folders reaches every agent, including ones added later.
+ * Copies each skill to the tools that miss it; never overwrites. Returns a message for the user.
+ */
+export function shareSkills(): { ok: boolean; message: string } {
+  const catalog = listSkills();
+  let copied = 0;
+  for (const from of ALL) {
+    for (const skill of catalog[from]) {
+      for (const to of ALL) {
+        if (catalog[to].some((s) => s.name === skill.name) || existsSync(join(SKILL_DIRS[to], skill.folder))) continue;
+        cpSync(join(SKILL_DIRS[from], skill.folder), join(SKILL_DIRS[to], skill.folder), { recursive: true, errorOnExist: false, force: false });
+        catalog[to].push(skill);
+        copied++;
+      }
+    }
+  }
+  return copied
+    ? { ok: true, message: `Pronto: ${copied} cópia(s) feitas. Agora todos os agentes têm as mesmas skills.` }
+    : { ok: true, message: 'Todos os agentes já tinham as mesmas skills.' };
+}
+
+/**
+ * Installs an uploaded skill folder into every tool's skills folder, so all agents get it. Paths are checked so
  * nothing lands outside the new skill's folder, and an existing skill is never overwritten.
  * Returns a message for the user.
  */
-export function importSkill(files: SkillFile[], targets: Account[]): { ok: boolean; message: string } {
-  if (!targets.length) return { ok: false, message: 'Escolha pelo menos um agente para receber a skill.' };
+export function importSkill(files: SkillFile[]): { ok: boolean; message: string } {
   if (!files.length || files.length > MAX_FILES) return { ok: false, message: `A skill precisa ter entre 1 e ${MAX_FILES} arquivos.` };
 
   const decoded = files.map((f) => ({ path: f.path.replace(/\\/g, '/'), data: Buffer.from(f.base64, 'base64') }));
@@ -69,9 +93,10 @@ export function importSkill(files: SkillFile[], targets: Account[]): { ok: boole
   }
   if (!meta.description) return { ok: false, message: 'O SKILL.md precisa de uma "description:" no topo.' };
 
-  const taken = targets.filter((t) => existsSync(join(SKILL_DIRS[t], meta.name!)));
-  if (taken.length) {
-    return { ok: false, message: `Já existe uma skill "${meta.name}" em ${taken.map(label).join(', ')}. Apague ou renomeie a antiga antes de importar.` };
+  // A tool that already has a skill with this name keeps its own copy.
+  const targets = ALL.filter((t) => !existsSync(join(SKILL_DIRS[t], meta.name!)));
+  if (!targets.length) {
+    return { ok: false, message: `Todos os agentes já têm uma skill "${meta.name}". Apague ou renomeie a antiga antes de importar.` };
   }
 
   for (const target of targets) {
@@ -82,9 +107,5 @@ export function importSkill(files: SkillFile[], targets: Account[]): { ok: boole
       writeFileSync(dest, f.data);
     }
   }
-  return { ok: true, message: `Skill "${meta.name}" instalada em ${targets.map(label).join(', ')}. Vale a partir da próxima tarefa.` };
-}
-
-function label(account: Account) {
-  return { claude: 'Claude', codex: 'Codex', antigravity: 'Gemini' }[account];
+  return { ok: true, message: `Skill "${meta.name}" instalada para todos os agentes. Vale a partir da próxima tarefa.` };
 }

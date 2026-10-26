@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type {
   Account,
+  AccountStatus,
   AgentStatus,
   AgentView,
   Lang,
@@ -52,19 +53,23 @@ export class Office {
     claude: { status: 'unknown' },
     codex: { status: 'unknown' },
     antigravity: { status: 'unknown' },
+    opencode: { status: 'unknown' },
   };
   /** Hand a step to another agent when its account hits the limit. */
   autoSwitch = true;
   /** Language chosen in Ajustes; agents are told to reply in it. */
   lang: Lang = 'pt';
   /** Models each engine offers, for Configurações. */
-  models: ModelCatalog = { claude: [], codex: [], antigravity: [] };
+  models: ModelCatalog = { claude: [], codex: [], antigravity: [], opencode: [] };
   private nextLogId = 1;
   private listeners = new Set<(msg: ServerMessage) => void>();
   project: string;
+  /** Which accounts this machine is signed in to, for Ajustes. */
+  accounts: Record<Account, AccountStatus>;
 
-  constructor(project: string) {
+  constructor(project: string, accounts: Record<Account, AccountStatus>) {
     this.project = project;
+    this.accounts = accounts;
   }
 
   subscribe(listener: (msg: ServerMessage) => void) {
@@ -83,6 +88,7 @@ export class Office {
       quota: this.quota,
       autoSwitch: this.autoSwitch,
       models: this.models,
+      accounts: this.accounts,
       project: this.project,
       lang: this.lang,
     };
@@ -153,6 +159,11 @@ export class Office {
   setModels(models: ModelCatalog) {
     this.models = models;
     this.emit({ type: 'models', models });
+  }
+
+  setAccounts(accounts: Record<Account, AccountStatus>) {
+    this.accounts = accounts;
+    this.emit({ type: 'accounts', accounts });
   }
 
   setAutoSwitch(enabled: boolean) {

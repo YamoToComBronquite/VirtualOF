@@ -184,7 +184,9 @@ export function stressColor(value: number) {
 
 /** Skin, hair and hairstyle come from the agent id, so a character looks the same everywhere. */
 function lookFor(agent: AgentView): Look {
-  let look = looks.get(agent.id);
+  // A desk can switch AI (and with it the headset), so the kind is part of the key.
+  const key = `${agent.id}|${agent.kind}|${agent.color}`;
+  let look = looks.get(key);
   if (look) return look;
   const h = hash(agent.id);
   const skin = SKINS[h % SKINS.length];
@@ -205,7 +207,7 @@ function lookFor(agent: AgentView): Look {
     overlay: hairOverlay(HAIR_STYLES[(h >> 8) % HAIR_STYLES.length]),
     headset: agent.kind === 'antigravity',
   };
-  looks.set(agent.id, look);
+  looks.set(key, look);
   return look;
 }
 

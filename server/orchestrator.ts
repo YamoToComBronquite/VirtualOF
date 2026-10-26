@@ -60,6 +60,7 @@ export class Orchestrator {
 
   async start(command: string, cwd: string) {
     if (this.running) return this.office.notice('Já tem um comando geral em andamento.');
+    if (!this.team.list().length) return this.office.notice('O escritório está vazio. Monte a equipe em Ajustes.');
     const coordinator = this.team.coordinator();
     if (!coordinator) return this.office.notice('Escolha um coordenador em Configurações.');
     const workers = this.team.workers();

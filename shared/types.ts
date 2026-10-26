@@ -1,6 +1,9 @@
 /** Types shared by the server and the browser. */
 
-export type AgentKind = 'claude' | 'codex' | 'antigravity';
+export type AgentKind = 'claude' | 'codex' | 'antigravity' | 'opencode';
+
+/** The room has six desks: three across, two rows. */
+export const DESK_COUNT = 6;
 
 /** Job an agent has on the team; 'folga' means it sits out of general commands. */
 export type RoleKey = 'coordenador' | 'designer' | 'executor' | 'tester' | 'revisor' | 'folga';
@@ -85,7 +88,10 @@ export type ModelCatalog = Record<AgentKind, ModelOption[]>;
 
 /** One agent's settings as saved from Configurações. */
 export interface MemberSettings {
+  /** An existing agent's id, or one starting with "novo" for a desk filled in Configurações. */
   id: string;
+  /** Which AI sits at this desk, by the accounts the user has. */
+  kind: AgentKind;
   role: RoleKey;
   nickname: string;
   model: string;
@@ -107,7 +113,21 @@ export interface SkillFile {
 }
 
 /** Agents bill to an account: both Claude agents share one, Codex uses the ChatGPT one. */
-export type Account = 'claude' | 'codex' | 'antigravity';
+export type Account = AgentKind;
+
+/** Accounts with a free tier: Gemini through the Antigravity CLI, and OpenCode's free models. */
+export const FREE_ACCOUNTS: Account[] = ['antigravity', 'opencode'];
+
+/** Whether this machine has a login for an account, and the command that sets it up. */
+export interface AccountStatus {
+  /** Undefined when the CLI's login can't be read from outside (the free ones). */
+  signedIn?: boolean;
+  /** False when the CLI isn't on this machine yet; `login` then installs it. */
+  installed: boolean;
+  login: string;
+  /** What to do once the command is running, e.g. type /login. */
+  hint: string;
+}
 
 /** How much of an account's subscription limit is used, as far as its SDK tells us. */
 export interface Quota {
@@ -151,10 +171,12 @@ export type ServerMessage =
       quota: Record<Account, Quota>;
       autoSwitch: boolean;
       models: ModelCatalog;
+      accounts: Record<Account, AccountStatus>;
       project: string;
       lang: Lang;
     }
   | { type: 'language'; lang: Lang }
+  | { type: 'accounts'; accounts: Record<Account, AccountStatus> }
   | { type: 'models'; models: ModelCatalog }
   | { type: 'skills'; skills: SkillCatalog }
   | { type: 'skill-imported'; ok: boolean; message: string }
@@ -193,6 +215,7 @@ export type ClientMessage =
   | { type: 'shell-kill' }
   | { type: 'command'; prompt: string }
   | { type: 'team'; team: MemberSettings[]; autoSwitch: boolean }
+  | { type: 'check-accounts' }
   | { type: 'list-skills' }
   | { type: 'import-skill'; files: SkillFile[] }
   | { type: 'share-skills' }

@@ -4,6 +4,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { ModelCatalog, ModelOption } from '../shared/types.ts';
 import { agyPath } from './agents/agy.ts';
+import { OPENCODE_DEFAULT_MODEL, opencodePath, spawnOpencode } from './agents/opencode.ts';
 
 const CLAUDE: ModelOption[] = [
   { id: '', label: 'Padrão do Claude Code' },
@@ -59,15 +60,53 @@ function agyModels(): Promise<ModelOption[]> {
   });
 }
 
-/** Claude and Codex lists are immediate; the agy list arrives when the CLI answers. */
+/** OpenCode's free models as its docs list them; `opencode models opencode` replaces this when it answers. */
+const OPENCODE_FREE: ModelOption[] = [
+  { id: '', label: 'Padrão (Big Pickle, grátis)' },
+  ...['deepseek-v4.1-flash-free', 'glm-5.3-flash-free', 'mimo-v2.6-flash-free', 'nemotron-3-ultra-free', 'nemotron-3.5-super-vl-free'].map(
+    (id) => ({ id: `opencode/${id}`, label: id }),
+  ),
+];
+
+/** The free models the installed opencode offers right now ("opencode/<id>" lines). */
+function opencodeModels(): Promise<ModelOption[]> {
+  const exe = opencodePath();
+  if (!exe) return Promise.resolve(OPENCODE_FREE);
+  return new Promise((resolve) => {
+    let out = '';
+    const child = spawnOpencode(exe, ['models', 'opencode'], homedir());
+    const timer = setTimeout(() => child.kill(), 30_000);
+    child.stdout?.on('data', (chunk) => (out += String(chunk)));
+    child.on('error', () => {
+      clearTimeout(timer);
+      resolve(OPENCODE_FREE);
+    });
+    child.on('close', () => {
+      clearTimeout(timer);
+      const free = out
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((id) => /^opencode\/[\w.-]+$/.test(id) && /free|big-pickle/.test(id) && id !== OPENCODE_DEFAULT_MODEL)
+        .map((id) => ({ id, label: id.slice('opencode/'.length) }));
+      resolve(free.length ? [OPENCODE_FREE[0], ...free] : OPENCODE_FREE);
+    });
+  });
+}
+
+/** Claude and Codex lists are immediate; the agy and opencode lists arrive when their CLIs answer. */
 export async function loadModels(onUpdate: (models: ModelCatalog) => void): Promise<ModelCatalog> {
   const models: ModelCatalog = {
     claude: CLAUDE,
     codex: codexModels(),
     antigravity: [{ id: '', label: 'Padrão do Antigravity' }],
+    opencode: OPENCODE_FREE,
   };
   void agyModels().then((list) => {
     models.antigravity = list;
+    onUpdate(models);
+  });
+  void opencodeModels().then((list) => {
+    models.opencode = list;
     onUpdate(models);
   });
   return models;

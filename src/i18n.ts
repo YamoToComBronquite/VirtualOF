@@ -255,6 +255,53 @@ const EXACT: Record<string, string> = {
   'O Antigravity CLI tem login próprio. Rode este comando num terminal novo, entre com sua conta do Google no navegador e, se aparecer um código, cole no terminal.':
     'The Antigravity CLI has its own sign-in. Run this command in a new terminal, sign in with your Google account in the browser and, if a code shows up, paste it in the terminal.',
   'O Codex ainda não está logado na sua conta do ChatGPT.': "Codex isn't signed in to your ChatGPT account yet.",
+  Contas: 'Accounts',
+  'As mesas usam as contas logadas neste computador. Mesa sem conta pode ficar com uma IA grátis.':
+    'Desks use the accounts signed in on this computer. Desks with no account can use a free AI.',
+  'Escolha a IA e o papel de cada um e a ordem das mesas. Precisa de um supervisor e pelo menos um fullstack.':
+    'Pick each one’s AI and role and the desk order. You need one supervisor and at least one fullstack.',
+  'OpenCode (modelos grátis)': 'OpenCode (free models)',
+  'OpenCode, modelos grátis': 'OpenCode, free models',
+  grátis: 'free',
+  'falta instalar': 'not installed',
+  'sem login': 'not signed in',
+  Grátis: 'Free',
+  'Falta instalar': 'Not installed',
+  'Logado neste computador': 'Signed in on this computer',
+  'Sem login': 'Not signed in',
+  Instalar: 'Install',
+  Entrar: 'Sign in',
+  'Entrar de novo': 'Sign in again',
+  Configurar: 'Set up',
+  'Adicionar agente': 'Add agent',
+  'Montar com minhas contas': 'Build from my accounts',
+  'Todas as mesas ocupadas': 'Every desk is taken',
+  'Esvaziar a mesa': 'Empty the desk',
+  'Nenhuma mesa ocupada. Adicione um agente ou monte a equipe com as suas contas.':
+    'No desk is taken yet. Add an agent or build the team from your accounts.',
+  'Este computador não tem login nessa conta. Entre em Contas, acima.': "This computer isn't signed in to that account. Sign in under Accounts, above.",
+  'O OpenCode edita arquivos sem post-it; o que ele pedir permissão para fazer é recusado.':
+    'OpenCode edits files without sticky notes; anything it asks permission for is refused.',
+  'Usa a configuração do OpenCode (~/.config/opencode).': 'Uses the OpenCode config (~/.config/opencode).',
+  'O escritório está vazio. Monte a equipe em Ajustes.': 'The office is empty. Put a team together in Settings.',
+  'Modelo desconhecido para um dos agentes.': 'Unknown model for one of the agents.',
+  'O OpenCode não está instalado neste computador.': 'OpenCode is not installed on this computer.',
+  'Os modelos grátis rodam pelo OpenCode, que ainda não está instalado. Precisa do Node.js.':
+    "The free models run through OpenCode, which isn't installed yet. It needs Node.js.",
+  'Este modelo pede login. Escolha o provedor OpenCode e siga o que aparecer.': 'This model needs a sign-in. Pick the OpenCode provider and follow the prompts.',
+  'Limite do modelo grátis atingido': 'Free model limit reached',
+  'Falta entrar no OpenCode': 'OpenCode sign-in needed',
+  'Quando o Claude Code abrir, digite /login, entre com sua conta no navegador e depois digite /exit.':
+    'When Claude Code opens, type /login, sign in with your account in the browser, then type /exit.',
+  'Entre com sua conta do ChatGPT no navegador que abrir.': 'Sign in with your ChatGPT account in the browser that opens.',
+  'Entre com sua conta do Google no navegador e, se aparecer um código, cole no terminal.':
+    'Sign in with your Google account in the browser and, if a code shows up, paste it in the terminal.',
+  'Instala o Antigravity CLI, o instalador oficial do Google. Depois clique em Entrar.':
+    "Installs the Antigravity CLI with Google's official installer. Then click Sign in.",
+  'Os modelos grátis funcionam sem login. Entre só se quiser usar outro provedor.':
+    'The free models work without signing in. Sign in only to use another provider.',
+  'Instala o OpenCode pelo npm (precisa do Node.js). Os modelos grátis funcionam sem login.':
+    'Installs OpenCode with npm (needs Node.js). The free models work without signing in.',
 };
 
 const PATTERNS: [RegExp, string][] = [

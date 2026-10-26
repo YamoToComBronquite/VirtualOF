@@ -44,7 +44,7 @@ const state = {
   permissions: [] as PermissionRequest[],
   terminal: [] as TerminalAlert[],
   plan: null as Plan | null,
-  quota: { claude: { status: 'unknown' }, codex: { status: 'unknown' } } as Record<Account, Quota>,
+  quota: { claude: { status: 'unknown' }, codex: { status: 'unknown' }, antigravity: { status: 'unknown' } } as Record<Account, Quota>,
   autoSwitch: true,
   project: '',
   selectedId: undefined as string | undefined,
@@ -344,10 +344,22 @@ function renderDesk() {
 }
 
 function accountOf(agent: AgentView): Account | undefined {
-  return agent.kind === 'antigravity' ? undefined : agent.kind;
+  // Antigravity IDE conversations are only watched; the Gemini agent (agy) bills to Google.
+  return agent.controllable ? agent.kind : undefined;
 }
 
-const ACCOUNT_NAMES: Record<Account, string> = { claude: 'Conta do Claude', codex: 'Conta do ChatGPT (Codex)' };
+const ACCOUNT_NAMES: Record<Account, string> = {
+  claude: 'Conta do Claude',
+  codex: 'Conta do ChatGPT (Codex)',
+  antigravity: 'Conta do Google (Gemini)',
+};
+
+/** What drives each agent, for the settings list. */
+const ENGINE_NAMES: Record<AgentView['kind'], string> = {
+  claude: 'Claude',
+  codex: 'Codex',
+  antigravity: 'Gemini pelo Antigravity CLI',
+};
 
 function clock(ms: number) {
   const at = new Date(ms);
@@ -630,9 +642,14 @@ function renderSettings() {
       frame.append(portrait(entry.agent));
 
       const info = el('span', 'member__info');
-      info.append(el('span', 'card__name', entry.agent.name), el('span', 'card__role', entry.agent.kind === 'claude' ? 'Claude' : 'Codex'));
+      info.append(el('span', 'card__name', entry.agent.name), el('span', 'card__role', ENGINE_NAMES[entry.agent.kind]));
       if (entry.agent.kind === 'codex' && entry.role === 'executor') {
         info.append(el('span', 'member__warn', 'Como executor, o Codex edita arquivos sem post-it de permissão.'));
+      }
+      if (entry.agent.kind === 'antigravity') {
+        info.append(
+          el('span', 'member__warn', 'O Gemini edita arquivos do projeto sem post-it; comandos de terminal ficam bloqueados.'),
+        );
       }
 
       const select = el('select');

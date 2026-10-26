@@ -46,7 +46,11 @@ export class Office {
   private pending = new Map<string, PendingPermission>();
   private terminal = new Map<string, TerminalAlert>();
   private plan: Plan | null = null;
-  private quota: Record<Account, Quota> = { claude: { status: 'unknown' }, codex: { status: 'unknown' } };
+  private quota: Record<Account, Quota> = {
+    claude: { status: 'unknown' },
+    codex: { status: 'unknown' },
+    antigravity: { status: 'unknown' },
+  };
   /** Hand a step to another agent when its account hits the limit. */
   autoSwitch = true;
   private nextLogId = 1;

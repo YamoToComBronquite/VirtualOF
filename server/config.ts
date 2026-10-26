@@ -6,7 +6,7 @@ import type { RoleKey } from '../shared/types.ts';
 export interface AgentConfig {
   id: string;
   nome: string;
-  tipo: 'claude' | 'codex';
+  tipo: 'claude' | 'codex' | 'antigravity';
   papel: RoleKey;
   cor: string;
 }

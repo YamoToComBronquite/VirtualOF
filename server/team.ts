@@ -1,4 +1,5 @@
 import { ROLE_NAMES, type Account, type RoleKey } from '../shared/types.ts';
+import { AgyAgent } from './agents/agy.ts';
 import { ClaudeAgent } from './agents/claude.ts';
 import { CodexAgent } from './agents/codex.ts';
 import type { Runner } from './agents/runner.ts';
@@ -22,8 +23,8 @@ export class Team {
   ) {
     this.members = config.agentes.map((agent) => {
       const brief = () => this.brief(agent.id);
-      const runner = agent.tipo === 'claude' ? new ClaudeAgent(agent.id, office, brief) : new CodexAgent(agent.id, office, brief);
-      return { config: agent, runner };
+      const Engine = { claude: ClaudeAgent, codex: CodexAgent, antigravity: AgyAgent }[agent.tipo];
+      return { config: agent, runner: new Engine(agent.id, office, brief) };
     });
     for (const { config: agent } of this.members) {
       office.addAgent({
@@ -37,11 +38,13 @@ export class Team {
         activity: 'Livre',
         controllable: true,
         usage: { tasks: 0, inputTokens: 0, outputTokens: 0 },
-        // Codex reads its own config, which the SDK does not report back.
+        // Codex and agy read their own config, which they do not report back in full.
         toolkit:
           agent.tipo === 'codex'
             ? { skills: [], plugins: [], mcp: [], note: 'Usa a configuração do Codex (~/.codex): servidores MCP e skills de lá.' }
-            : undefined,
+            : agent.tipo === 'antigravity'
+              ? { skills: [], plugins: [], mcp: [], note: 'Usa a configuração do Antigravity CLI (~/.gemini/antigravity-cli).' }
+              : undefined,
       });
     }
   }

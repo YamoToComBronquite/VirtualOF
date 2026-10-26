@@ -1,6 +1,6 @@
 {
   "name": "virtualof",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "A pixel-art virtual office to command AI coding agents (Claude, Codex) and watch Antigravity.",
   "license": "MIT",

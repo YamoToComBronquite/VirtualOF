@@ -910,6 +910,19 @@ $('stop').addEventListener('click', () => {
   if (state.selectedId) send({ type: 'stop', agentId: state.selectedId });
 });
 
+// Only in the desktop app: the native Windows folder picker.
+const desktop = (window as { virtualof?: { pickFolder(): Promise<string | null> } }).virtualof;
+if (desktop) {
+  const pick = $<HTMLButtonElement>('pick-folder');
+  pick.hidden = false;
+  pick.addEventListener('click', async () => {
+    const folder = await desktop.pickFolder();
+    if (!folder) return;
+    $<HTMLInputElement>('project').value = folder;
+    send({ type: 'project', path: folder });
+  });
+}
+
 $('project-form').addEventListener('submit', (event) => {
   event.preventDefault();
   send({ type: 'project', path: $<HTMLInputElement>('project').value });

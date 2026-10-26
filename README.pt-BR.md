@@ -21,28 +21,37 @@ Um escritório virtual em pixel art para os seus agentes de IA. Você passa tare
 - **Acompanha o Antigravity.** As conversas do Antigravity aparecem como personagens que se acendem quando estão trabalhando. É só acompanhamento: tarefas para o Antigravity continuam pelo próprio Antigravity.
 - **Status ao vivo em cada mesa.** A tela, o balão e a luminária mostram se o agente está pensando, lendo, escrevendo, rodando comando, esperando você, terminou ou deu erro. Com a aba em segundo plano, chegam notificações do sistema.
 
-## Requisitos
+## Primeiros passos
 
-- Node.js 22 ou mais novo
-- Uma conta do Claude logada no Claude Code neste computador (CLI ou extensão da IDE), ou uma `ANTHROPIC_API_KEY`
-- Para o revisor Codex: uma conta do ChatGPT. Faça login uma vez com `npx codex login` dentro da pasta do projeto
-- Para o agente Gemini: o [Antigravity CLI](https://antigravity.google/docs/getting-started) (`agy`), logado com sua conta do Google (rode `agy` uma vez num terminal; o login é separado do IDE). Se faltar, o escritório mostra o comando de instalação
-- Opcional: o [Antigravity](https://antigravity.google), para ver as conversas do IDE no escritório
+O VirtualOF **não é um site**: ele roda no seu computador, porque é daí que os agentes leem e mudam os seus arquivos e usam as suas contas. A janela (ou o navegador) é só a tela dele.
 
-Os agentes usam as suas próprias assinaturas e gastam os limites de sempre. Vários agentes trabalhando ao mesmo tempo gastam esses limites mais rápido.
+### Jeito 1: instalar o app (Windows)
 
-## Como começar
+1. Baixe o `VirtualOF-Setup.exe` em [Releases](https://github.com/YamoToComBronquite/VirtualOF/releases) e instale.
+2. Abra o **VirtualOF** pelo menu Iniciar. Fechar a janela desliga o escritório e os agentes.
+3. Clique em **Escolher…**, selecione a pasta do projeto e mande uma tarefa.
 
-```bash
-git clone https://github.com/YamoToComBronquite/VirtualOF.git
-cd VirtualOF
-npm install
-npm start -- --abrir
-```
+O instalador já traz tudo o que precisa (inclusive os motores do Claude Code e do Codex), por isso é grande.
 
-O `--abrir` abre o navegador em http://localhost:4321. No Windows, também dá para dar dois cliques em `Abrir escritorio.cmd`.
+### Jeito 2: rodar pelo código
 
-Depois, cole o caminho do projeto em que os agentes vão trabalhar, clique em **Usar**, escolha uma mesa e mande uma tarefa.
+1. Instale o [Node.js](https://nodejs.org) 22 ou mais novo.
+2. Baixe o projeto: botão **Code → Download ZIP** no GitHub, ou `git clone https://github.com/YamoToComBronquite/VirtualOF.git`.
+3. No Windows, dê dois cliques em `Abrir escritorio.cmd`. Em outros sistemas, rode `npm install` e depois `npm start -- --abrir` dentro da pasta.
+4. O navegador abre em http://localhost:4321. Deixe a janela preta aberta: fechar ela desliga o escritório.
+
+Para gerar o instalador você mesmo, rode `npm run dist` (ele sai em `release/`).
+
+### Contas
+
+Cada pessoa usa as próprias assinaturas, e os agentes gastam os limites de sempre:
+
+- **Claude:** uma conta logada no Claude Code neste computador (CLI ou extensão da IDE), ou uma `ANTHROPIC_API_KEY`.
+- **Codex:** uma conta do ChatGPT. Se faltar o login, o escritório mostra o comando no cartão **Abra o terminal**.
+- **Gemini:** o [Antigravity CLI](https://antigravity.google/docs/getting-started) (`agy`), logado com sua conta do Google (rode `agy` uma vez num terminal; o login é separado do IDE). Se faltar, o escritório mostra o comando de instalação.
+- **Opcional:** o [Antigravity](https://antigravity.google), para ver as conversas do IDE no escritório.
+
+Vários agentes trabalhando ao mesmo tempo gastam esses limites mais rápido.
 
 ## Configuração
 

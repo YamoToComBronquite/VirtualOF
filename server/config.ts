@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { RoleKey } from '../shared/types.ts';
 
@@ -36,7 +37,10 @@ interface LocalSettings {
 }
 
 const CONFIG_PATH = fileURLToPath(new URL('../escritorio.config.json', import.meta.url));
-const LOCAL_PATH = fileURLToPath(new URL('../.escritorio.local.json', import.meta.url));
+// The desktop app is installed read-only, so it keeps these in the user's app-data folder.
+const LOCAL_PATH = process.env.VIRTUALOF_DATA_DIR
+  ? join(process.env.VIRTUALOF_DATA_DIR, 'escritorio.local.json')
+  : fileURLToPath(new URL('../.escritorio.local.json', import.meta.url));
 
 function readLocal(): LocalSettings {
   return existsSync(LOCAL_PATH) ? (JSON.parse(readFileSync(LOCAL_PATH, 'utf8')) as LocalSettings) : {};

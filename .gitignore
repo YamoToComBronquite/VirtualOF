@@ -6,3 +6,7 @@ dist/
 
 # Machine-specific settings (chosen project folder)
 .escritorio.local.json
+
+# Build output
+dist-server/
+release/

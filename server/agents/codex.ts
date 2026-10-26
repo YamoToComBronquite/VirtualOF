@@ -1,12 +1,15 @@
 import { Codex, type Thread, type ThreadEvent, type ThreadItem } from '@openai/codex-sdk';
 import { basename } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { TERMINAL_RULE, type Office } from '../office.ts';
+import { codexBinary, packagedCodex } from './binaries.ts';
 import { clip } from './describe.ts';
 import type { RoleBrief, RunOutcome, Runner } from './runner.ts';
 
-/** The Codex binary ships inside this project's node_modules, so its login runs from here. */
-const OFFICE_DIR = fileURLToPath(new URL('../..', import.meta.url));
+/** Codex ships inside this project's packages, so its login runs that same executable. */
+function loginCommand() {
+  const exe = codexBinary();
+  return exe ? `& "${exe}" login` : 'npx codex login';
+}
 
 /** Reads "try again at 1:34 PM" from a Codex limit message as today's (or tomorrow's) time. */
 function parseRetryAt(text: string): number | undefined {
@@ -28,7 +31,8 @@ function parseRetryAt(text: string): number | undefined {
  * files while it is an executor.
  */
 export class CodexAgent implements Runner {
-  private codex = new Codex();
+  // Inside the desktop app the SDK must be pointed at the unpacked executable.
+  private codex = new Codex({ codexPathOverride: packagedCodex() });
   private thread?: Thread;
   private threadCwd?: string;
   private threadRole?: string;
@@ -110,7 +114,7 @@ export class CodexAgent implements Runner {
     this.office.setStatus(id, 'error', 'Deu erro, veja o registro');
     if (/login|auth|401|unauthorized/i.test(text)) {
       this.thread = undefined; // the next task starts clean after the login
-      this.office.needTerminal(id, `cd "${OFFICE_DIR}"; npx codex login`, 'O Codex ainda não está logado na sua conta do ChatGPT.');
+      this.office.needTerminal(id, loginCommand(), 'O Codex ainda não está logado na sua conta do ChatGPT.');
     }
   }
 

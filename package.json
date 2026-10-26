@@ -14,7 +14,12 @@
   },
   "scripts": {
     "start": "node --import tsx server/index.ts",
-    "typecheck": "tsc --noEmit -p ."
+    "typecheck": "tsc --noEmit -p .",
+    "build:web": "vite build",
+    "build:server": "esbuild server/app.ts --bundle --platform=node --format=esm --target=node22 --packages=external --outfile=dist-server/app.mjs",
+    "build": "npm run build:web && npm run build:server",
+    "app": "npm run build && electron .",
+    "dist": "npm run build && electron-builder --win"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.310",
@@ -25,8 +30,43 @@
   "devDependencies": {
     "@types/node": "^26.6.5",
     "@types/ws": "^8.18.2",
+    "electron": "^45.0.0",
+    "electron-builder": "^26.18.0",
+    "esbuild": "^0.28.2",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vite": "^8.3.5"
+  },
+  "main": "electron/main.mjs",
+  "author": "caio306santana",
+  "build": {
+    "appId": "io.github.yamotocombronquite.virtualof",
+    "productName": "VirtualOF",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "dist-server/**",
+      "electron/**",
+      "build/icon.png",
+      "escritorio.config.json",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/@anthropic-ai/claude-agent-sdk-*/**",
+      "node_modules/@openai/codex-*/**"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "VirtualOF",
+      "artifactName": "VirtualOF-Setup.${ext}"
+    }
   }
 }

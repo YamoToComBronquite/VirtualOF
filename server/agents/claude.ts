@@ -1,5 +1,6 @@
 import { query, type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import { TERMINAL_RULE, type Office } from '../office.ts';
+import { claudeBinary } from './binaries.ts';
 import { clip, describeTool, statusForTool } from './describe.ts';
 import type { RoleBrief, RunOutcome, Runner } from './runner.ts';
 
@@ -65,6 +66,7 @@ export class ClaudeAgent implements Runner {
           systemPrompt: { type: 'preset', preset: 'claude_code', append: `${brief.instructions}\n\n${TERMINAL_RULE}` },
           // Empty means whatever the user's Claude Code is set to.
           model: brief.model || undefined,
+          pathToClaudeCodeExecutable: claudeBinary(),
           canUseTool: async (tool, input, { signal }) => {
             this.office.setStatus(id, 'waiting', `Esperando você aprovar: ${tool}`);
             const allow = await this.office.askPermission(id, tool, describeTool(tool, input), signal);

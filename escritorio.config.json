@@ -32,11 +32,11 @@
       "cor": "#e3a04f"
     },
     {
-      "id": "gemini",
-      "nome": "Gemini",
-      "tipo": "antigravity",
+      "id": "revisor",
+      "nome": "Codex",
+      "tipo": "codex",
       "papel": "designer",
-      "cor": "#6f8cf0"
+      "cor": "#4fb3a5"
     },
     {
       "id": "dev",
@@ -53,11 +53,11 @@
       "cor": "#5fbf8f"
     },
     {
-      "id": "revisor",
-      "nome": "Codex",
-      "tipo": "codex",
+      "id": "gemini",
+      "nome": "Gemini",
+      "tipo": "antigravity",
       "papel": "tester",
-      "cor": "#4fb3a5"
+      "cor": "#6f8cf0"
     },
     {
       "id": "critico",

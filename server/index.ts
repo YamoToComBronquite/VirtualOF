@@ -12,6 +12,7 @@ import { loadConfig, saveProject } from './config.ts';
 import { loadModels } from './models.ts';
 import { Office } from './office.ts';
 import { Orchestrator } from './orchestrator.ts';
+import { importSkill, listSkills, SKILL_DIRS } from './skills.ts';
 import { Team } from './team.ts';
 
 const HOST = '127.0.0.1';
@@ -71,6 +72,16 @@ function handle(msg: ClientMessage) {
     case 'stop-plan':
       orchestrator.stop();
       return;
+    case 'list-skills':
+      office.publish({ type: 'skills', skills: listSkills() });
+      return;
+    case 'import-skill': {
+      const targets = msg.targets.filter((t) => t in SKILL_DIRS);
+      const result = importSkill(msg.files, targets);
+      office.publish({ type: 'skill-imported', ...result });
+      if (result.ok) office.publish({ type: 'skills', skills: listSkills() });
+      return;
+    }
     case 'team': {
       if (orchestrator.running) return office.notice('Pare o comando geral antes de mudar a equipe.');
       const error = team.apply(msg.team, msg.autoSwitch !== false);

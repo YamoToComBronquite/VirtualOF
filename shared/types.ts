@@ -82,6 +82,21 @@ export interface MemberSettings {
   model: string;
 }
 
+export interface SkillInfo {
+  name: string;
+  description: string;
+  folder: string;
+}
+
+/** Skills installed for each tool, read from their skills folders. */
+export type SkillCatalog = Record<Account, SkillInfo[]>;
+
+/** One file of a skill being imported, path relative to the skill's folder. */
+export interface SkillFile {
+  path: string;
+  base64: string;
+}
+
 /** Agents bill to an account: both Claude agents share one, Codex uses the ChatGPT one. */
 export type Account = 'claude' | 'codex' | 'antigravity';
 
@@ -127,6 +142,8 @@ export type ServerMessage =
       project: string;
     }
   | { type: 'models'; models: ModelCatalog }
+  | { type: 'skills'; skills: SkillCatalog }
+  | { type: 'skill-imported'; ok: boolean; message: string }
   | { type: 'quota'; quota: Record<Account, Quota> }
   | { type: 'auto-switch'; enabled: boolean }
   | { type: 'plan'; plan: Plan | null }
@@ -155,5 +172,7 @@ export type ClientMessage =
   | { type: 'terminal-done'; id: string }
   | { type: 'command'; prompt: string }
   | { type: 'team'; team: MemberSettings[]; autoSwitch: boolean }
+  | { type: 'list-skills' }
+  | { type: 'import-skill'; files: SkillFile[]; targets: Account[] }
   | { type: 'stop-plan' }
   | { type: 'project'; path: string };

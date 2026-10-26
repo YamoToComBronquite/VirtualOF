@@ -167,6 +167,16 @@ export class Office {
     this.emit({ type: 'log', entry });
   }
 
+  /** Id of the newest log entry, to collect what an agent did from a given moment on. */
+  get lastLogId() {
+    return this.nextLogId - 1;
+  }
+
+  /** What an agent wrote to the log after entry `afterId`. */
+  entriesSince(agentId: string, afterId: number) {
+    return this.log.filter((e) => e.agentId === agentId && e.id > afterId);
+  }
+
   notice(text: string) {
     this.emit({ type: 'notice', text });
   }

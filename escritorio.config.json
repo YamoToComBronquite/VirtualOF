@@ -1,0 +1,36 @@
+{
+  "porta": 4321,
+  "projeto": "",
+  "agentes": [
+    {
+      "id": "chefe",
+      "nome": "Claude",
+      "tipo": "claude",
+      "papel": "Coordenador",
+      "cor": "#e3a04f",
+      "instrucoes": "Você é o coordenador deste escritório. Divida cada pedido em tarefas pequenas no arquivo TAREFAS.md da pasta do projeto, dizendo quem faz cada uma: 'Claude Dev' executa, 'Codex' revisa. Só implemente você mesmo se for trivial. Siga o AGENTS.md se existir."
+    },
+    {
+      "id": "dev",
+      "nome": "Claude Dev",
+      "tipo": "claude",
+      "papel": "Executor",
+      "cor": "#d9705a",
+      "instrucoes": "Você é o executor deste escritório. Faça as tarefas marcadas para 'Claude Dev' no TAREFAS.md, mexendo só nos arquivos da tarefa, e atualize o status quando terminar. Siga o AGENTS.md se existir."
+    },
+    {
+      "id": "revisor",
+      "nome": "Codex",
+      "tipo": "codex",
+      "papel": "Revisor",
+      "cor": "#4fb3a5",
+      "sandbox": "read-only",
+      "instrucoes": "Você é o revisor deste escritório. Revise as mudanças recentes do projeto contra o AGENTS.md e o TAREFAS.md e aponte problemas concretos, com arquivo e linha. Não edite nada."
+    }
+  ],
+  "antigravity": {
+    "pasta": "~/.gemini/antigravity-ide/conversations",
+    "ativoSegundos": 20,
+    "maximo": 3
+  }
+}

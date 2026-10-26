@@ -8,7 +8,6 @@ import type { Lang } from '../shared/types.ts';
 
 const EXACT: Record<string, string> = {
   // Header, tools and project
-  'Turno da Noite': 'Night Shift',
   'conectando…': 'connecting…',
   conectado: 'connected',
   desconectado: 'disconnected',

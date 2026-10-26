@@ -84,21 +84,9 @@ textarea {
   overflow: hidden;
 }
 
-.panel h1,
 .panel h2 {
   margin: 0;
-  font-family: var(--pixel);
-  font-weight: 400;
-}
-
-.panel h1 {
-  font-size: 22px;
-  color: var(--lamp);
-  white-space: nowrap;
-}
-
-.panel h2 {
-  font-size: 16px;
+  font: 400 16px var(--pixel);
 }
 
 .panel__head {
@@ -108,9 +96,7 @@ textarea {
 
 .panel__title {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  justify-content: flex-end;
 }
 
 /* Four tools in one row: icon over a short label */

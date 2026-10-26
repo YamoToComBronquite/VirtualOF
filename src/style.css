@@ -28,7 +28,7 @@ body {
   margin: 0;
   height: 100vh;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 380px;
+  grid-template-columns: auto minmax(0, 1fr) 380px;
   grid-template-rows: minmax(0, 1fr) auto;
   background: var(--night);
   color: var(--text);
@@ -102,21 +102,58 @@ textarea {
 }
 
 .panel__head {
+  display: grid;
+  gap: 12px;
+}
+
+.panel__title {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 10px;
 }
 
-.panel__head {
-  flex-wrap: wrap;
+/* Four tools in one row: icon over a short label */
+
+.toolbar {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
 }
 
-.panel__head h1 {
-  flex: 1 0 100%;
+.tool {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 8px 4px 6px;
+  background: var(--plum-raised);
+  color: var(--muted);
+  font: 600 12px var(--body);
+  box-shadow: inset 0 0 0 1px var(--line);
+  transition: color 120ms, box-shadow 120ms;
 }
 
-.panel__head .connection {
-  margin-right: auto;
+.tool:hover,
+.tool:focus-visible {
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--lamp);
+}
+
+.tool[aria-pressed='true'] {
+  color: #5fd86f;
+  box-shadow: inset 0 0 0 1px #5fd86f;
+}
+
+.tool svg,
+.project__view svg,
+.composer__send svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 button.small {
@@ -125,12 +162,26 @@ button.small {
 }
 
 .connection {
-  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
   color: var(--muted);
+}
+
+.connection i {
+  width: 8px;
+  height: 8px;
+  background: var(--bad);
 }
 
 .connection.is-on {
   color: var(--ok);
+}
+
+.connection.is-on i {
+  background: var(--ok);
+  box-shadow: 0 0 6px var(--ok);
 }
 
 label {
@@ -177,6 +228,38 @@ button.ghost {
 .project__row {
   display: flex;
   gap: 8px;
+}
+
+/* The open project as one line: folder name, full path underneath */
+
+.project__view {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 8px 8px 12px;
+  background: var(--night);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--lamp);
+}
+
+.project__text {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+
+.project__text strong {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.project__text span {
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 /* Team: one card per desk, with the character's portrait */
@@ -245,8 +328,9 @@ button.ghost {
 
 .card__top {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: 8px;
+  column-gap: 8px;
   min-width: 0;
 }
 
@@ -1223,14 +1307,19 @@ select {
 
 /* The terminal panel along the bottom, like the one in a code editor */
 
-.office {
+.drawer {
   grid-row: 1;
   grid-column: 1;
 }
 
-.panel {
+.office {
   grid-row: 1;
   grid-column: 2;
+}
+
+.panel {
+  grid-row: 1;
+  grid-column: 3;
 }
 
 .shell {
@@ -1322,4 +1411,212 @@ select {
 #open-shell[aria-pressed='true'] {
   border-color: #5fd86f;
   color: #5fd86f;
+}
+
+/* Left drawer: the team, how stressed each one is and what they do */
+
+.drawer {
+  display: flex;
+  min-height: 0;
+  background: var(--plum);
+  border-right: 1px solid var(--line);
+}
+
+.drawer__body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  width: 320px;
+  min-height: 0;
+  padding: 20px 8px 16px 16px;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.drawer .usage__table {
+  font-size: 12px;
+}
+
+.drawer .usage__table th,
+.drawer .usage__table td {
+  padding: 6px 2px;
+}
+
+.drawer.is-closed .drawer__body {
+  display: none;
+}
+
+.drawer__tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 26px;
+  padding: 0;
+  background: transparent;
+  color: var(--muted);
+  border-radius: 0;
+}
+
+.drawer__tab:hover {
+  background: var(--plum-raised);
+  color: var(--text);
+}
+
+.drawer__tab span {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font: 400 12px var(--pixel);
+  letter-spacing: 0.08em;
+}
+
+.drawer__tab svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.drawer.is-closed .drawer__tab svg {
+  transform: scaleX(-1);
+}
+
+.drawer h2 {
+  margin: 0;
+  font: 400 16px var(--pixel);
+}
+
+/* The stress meter inside each team card */
+
+.card__stress {
+  grid-column: 2 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: -6px;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.card__meter {
+  display: grid;
+  grid-template-columns: repeat(10, 6px);
+  gap: 2px;
+}
+
+.card__meter i {
+  height: 6px;
+  background: #3a3150;
+}
+
+/* General command: a message box with the crew it goes to */
+
+.command__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.command__crew {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.crew-face {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 24px;
+  background: var(--night);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+
+.crew-face canvas {
+  width: 20px;
+  height: 18px;
+  image-rendering: pixelated;
+}
+
+.crew-face:not([data-status='idle']):not([data-status='done']) {
+  border-color: var(--lamp);
+  box-shadow: 0 0 6px rgba(244, 194, 107, 0.5);
+}
+
+.crew-arrow {
+  margin: 0 2px;
+  color: var(--lamp);
+  font-weight: 700;
+}
+
+.composer {
+  display: grid;
+  background: var(--night);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  transition: border-color 120ms, box-shadow 120ms;
+}
+
+.composer:focus-within {
+  border-color: var(--lamp);
+  box-shadow: 0 0 0 3px rgba(244, 194, 107, 0.15);
+}
+
+.composer textarea {
+  min-height: 52px;
+  padding: 10px 12px 4px;
+  background: transparent;
+  border: 0;
+  outline: none;
+  resize: none;
+}
+
+.composer__bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px 6px 12px;
+}
+
+.composer__keys {
+  flex: 1;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.composer__send {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 50%;
+}
+
+.ideas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.idea {
+  padding: 5px 10px;
+  background: transparent;
+  color: var(--muted);
+  font: 400 12px var(--body);
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.idea:hover,
+.idea:focus-visible {
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--lamp);
 }

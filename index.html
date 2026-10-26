@@ -13,6 +13,36 @@
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
+    <aside id="drawer" class="drawer" aria-label="Equipe">
+      <div id="drawer-body" class="drawer__body">
+        <section class="crew" aria-labelledby="crew-title">
+          <h2 id="crew-title">Equipe</h2>
+          <ul id="team" class="team"></ul>
+        </section>
+
+        <section class="usage" aria-labelledby="usage-title">
+          <h2 id="usage-title">Consumo</h2>
+          <ul id="quota" class="quota"></ul>
+          <table class="usage__table">
+            <thead>
+              <tr>
+                <th scope="col">Agente</th>
+                <th scope="col">Tarefas</th>
+                <th scope="col">Tokens</th>
+                <th scope="col">Se fosse API</th>
+              </tr>
+            </thead>
+            <tbody id="usage-rows"></tbody>
+          </table>
+          <p id="auto-switch-state" class="hint"></p>
+        </section>
+      </div>
+      <button type="button" id="drawer-tab" class="drawer__tab" aria-controls="drawer-body" aria-expanded="true" title="Mostrar ou esconder a equipe">
+        <span>Equipe</span>
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3.5L5.5 8l4.5 4.5"/></svg>
+      </button>
+    </aside>
+
     <main class="office">
       <div class="office__stage">
         <canvas id="scene" aria-label="Escritório com os agentes nas mesas"></canvas>
@@ -35,61 +65,76 @@
 
     <aside class="panel">
       <header class="panel__head">
-        <h1>Turno da Noite</h1>
-        <span id="connection" class="connection">conectando…</span>
-        <button type="button" id="open-shell" class="ghost small" title="Ctrl + '">PowerShell</button>
-        <button type="button" id="open-ambiente" class="ghost small">Ambiente</button>
-        <button type="button" id="open-skills" class="ghost small">Skills</button>
-        <button type="button" id="open-settings" class="ghost small">Configurações</button>
+        <div class="panel__title">
+          <h1>Turno da Noite</h1>
+          <span id="connection" class="connection" role="status" title="Conexão com o escritório"><i aria-hidden="true"></i><span>conectando…</span></span>
+        </div>
+        <nav class="toolbar" aria-label="Ferramentas">
+          <button type="button" id="open-shell" class="tool" title="Terminal (Ctrl + ')" aria-pressed="false">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11v9h-11z M4.5 6l2 2-2 2 M8 10.5h3"/></svg>
+            <span>Terminal</span>
+          </button>
+          <button type="button" id="open-ambiente" class="tool" title="Mudar o visual do escritório">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5a5.5 5.5 0 1 0 0 11c1 0 1.2-.8.8-1.5-.5-.8 0-1.8 1-1.8h1.5a2.2 2.2 0 0 0 2.2-2.2C13.5 4.8 11 2.5 8 2.5z M5 7.5h.01 M6.5 5h.01 M9.5 5h.01"/></svg>
+            <span>Ambiente</span>
+          </button>
+          <button type="button" id="open-skills" class="tool" title="Ver e importar skills">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 2.5h7l2 2v9h-9z M5.5 7h5 M5.5 9.5h5 M5.5 12h3"/></svg>
+            <span>Skills</span>
+          </button>
+          <button type="button" id="open-settings" class="tool" title="Papéis, apelidos e modelos da equipe">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4.5h6 M11.5 4.5h2 M2.5 11.5h2 M7.5 11.5h6 M8.5 3v3 M4.5 10v3"/></svg>
+            <span>Ajustes</span>
+          </button>
+        </nav>
       </header>
 
       <form id="project-form" class="project">
-        <label for="project">Pasta do projeto</label>
-        <div class="project__row">
-          <input id="project" name="project" placeholder="C:\Users\…\meu-projeto" autocomplete="off" spellcheck="false" />
-          <button type="button" id="pick-folder" class="ghost" hidden>Escolher…</button>
-          <button type="submit">Usar</button>
+        <div id="project-view" class="project__view">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 4.5v8h13v-6.5h-6.5l-1.5-1.5z"/></svg>
+          <div class="project__text">
+            <strong id="project-name"></strong>
+            <span id="project-path"></span>
+          </div>
+          <button type="button" id="project-change" class="ghost small">Trocar</button>
+        </div>
+        <div id="project-edit" class="project__edit" hidden>
+          <label for="project">Pasta do projeto</label>
+          <div class="project__row">
+            <input id="project" name="project" placeholder="C:\Users\…\meu-projeto" autocomplete="off" spellcheck="false" />
+            <button type="button" id="pick-folder" class="ghost" hidden>Escolher…</button>
+            <button type="submit">Usar</button>
+          </div>
         </div>
       </form>
 
       <section class="command" aria-labelledby="command-title">
-        <h2 id="command-title">Comando geral</h2>
+        <div class="command__head">
+          <h2 id="command-title">Comando geral</h2>
+          <div id="command-crew" class="command__crew"></div>
+        </div>
         <p id="command-hint" class="hint"></p>
-        <form id="command-form" class="task">
+        <form id="command-form" class="composer">
           <label for="command" class="visually-hidden">Comando geral</label>
-          <textarea id="command" rows="3" placeholder="Ex.: crie uma página de login com validação e testes"></textarea>
-          <div class="task__actions">
-            <button type="submit" id="send-command">Mandar ao coordenador</button>
-            <button type="button" id="stop-plan" class="ghost" hidden>Parar plano</button>
+          <textarea id="command" rows="2" placeholder="O que a equipe deve fazer?"></textarea>
+          <div class="composer__bar">
+            <span class="composer__keys">Enter manda, Shift + Enter pula linha</span>
+            <button type="button" id="stop-plan" class="ghost small" hidden>Parar plano</button>
+            <button type="submit" id="send-command" class="composer__send" aria-label="Mandar ao coordenador" title="Mandar ao coordenador">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 13V3 M3.5 7.5L8 3l4.5 4.5"/></svg>
+            </button>
           </div>
         </form>
+        <div id="command-ideas" class="ideas" aria-label="Ideias de comando">
+          <button type="button" class="idea">Revise o projeto e aponte os bugs</button>
+          <button type="button" class="idea">Escreva testes para o que já existe</button>
+          <button type="button" class="idea">Explique como o projeto está organizado</button>
+        </div>
         <div id="plan" class="plan" hidden>
           <p id="plan-status" class="plan__status"></p>
           <ol id="plan-steps" class="plan__steps"></ol>
           <p id="plan-summary" class="plan__summary" hidden></p>
         </div>
-      </section>
-
-      <section class="crew" aria-labelledby="crew-title">
-        <h2 id="crew-title">Equipe</h2>
-        <ul id="team" class="team"></ul>
-      </section>
-
-      <section class="usage" aria-labelledby="usage-title">
-        <h2 id="usage-title">Consumo</h2>
-        <ul id="quota" class="quota"></ul>
-        <table class="usage__table">
-          <thead>
-            <tr>
-              <th scope="col">Agente</th>
-              <th scope="col">Tarefas</th>
-              <th scope="col">Tokens</th>
-              <th scope="col">Se fosse API</th>
-            </tr>
-          </thead>
-          <tbody id="usage-rows"></tbody>
-        </table>
-        <p id="auto-switch-state" class="hint"></p>
       </section>
 
       <section id="desk" class="desk" hidden>

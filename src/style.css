@@ -76,12 +76,12 @@ textarea {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 14px;
   min-height: 0;
-  padding: 20px 20px 16px;
+  padding: 20px 20px 14px;
   background: var(--plum);
   border-left: 1px solid var(--line);
-  overflow-y: auto;
+  overflow: hidden;
 }
 
 .panel h1,
@@ -385,19 +385,31 @@ button.ghost {
 
 /* General command and the coordinator's plan */
 
-.command {
-  display: grid;
-  gap: 8px;
-  padding: 14px;
-  border-radius: 6px;
-  background: linear-gradient(160deg, rgba(244, 194, 107, 0.12), var(--plum-raised) 60%);
-  box-shadow: inset 0 0 0 1px rgba(244, 194, 107, 0.35);
-}
+/* The coordinator's plan: one line above the message box, steps on demand */
 
 .plan {
-  display: grid;
+  padding: 8px 10px;
+  background: var(--plum-raised);
+  border-radius: 6px;
+}
+
+.plan summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
   gap: 8px;
-  margin-top: 4px;
+  cursor: pointer;
+}
+
+.plan__count {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.plan[open] .plan__steps {
+  margin-top: 8px;
+  max-height: 30vh;
+  overflow-y: auto;
 }
 
 .plan__status {
@@ -995,14 +1007,6 @@ select {
 
 /* Permission requests look like sticky notes */
 
-.notes ul {
-  display: grid;
-  gap: 10px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
 .note {
   padding: 12px 14px 10px;
   background: var(--note);
@@ -1058,14 +1062,6 @@ select {
 
 /* Something only the user can do: a terminal card */
 
-.terminal ul {
-  display: grid;
-  gap: 10px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
 .term {
   padding: 12px 14px;
   background: #0b0f0b;
@@ -1109,73 +1105,6 @@ select {
   background: transparent;
   color: var(--text);
   box-shadow: inset 0 0 0 1px #2f5a35;
-}
-
-/* Log */
-
-.log {
-  display: flex;
-  flex-direction: column;
-  min-height: 220px;
-  flex: 1;
-}
-
-.log__head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.log__filter {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0;
-}
-
-#log {
-  flex: 1;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  overflow-y: auto;
-  font-size: 13.5px;
-}
-
-#log li {
-  padding: 6px 0;
-  border-bottom: 1px solid var(--line);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-.log__who {
-  font-family: var(--pixel);
-  font-weight: 500;
-  margin-right: 6px;
-}
-
-#log li[data-kind='tool'],
-#log li[data-kind='permission'] {
-  color: var(--muted);
-}
-
-#log li[data-kind='task'] {
-  color: var(--lamp);
-}
-
-#log li[data-kind='error'] {
-  color: var(--bad);
-}
-
-#log li[data-kind='result'] {
-  color: var(--ok);
-}
-
-.log__empty {
-  color: var(--muted);
 }
 
 .usage {
@@ -1435,48 +1364,6 @@ select {
   background: #3a3150;
 }
 
-/* General command: a message box with the crew it goes to */
-
-.command__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.command__crew {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-}
-
-.crew-face {
-  display: grid;
-  place-items: center;
-  width: 26px;
-  height: 24px;
-  background: var(--night);
-  border: 1px solid var(--line);
-  border-radius: 3px;
-}
-
-.crew-face canvas {
-  width: 20px;
-  height: 18px;
-  image-rendering: pixelated;
-}
-
-.crew-face:not([data-status='idle']):not([data-status='done']) {
-  border-color: var(--lamp);
-  box-shadow: 0 0 6px rgba(244, 194, 107, 0.5);
-}
-
-.crew-arrow {
-  margin: 0 2px;
-  color: var(--lamp);
-  font-weight: 700;
-}
-
 .composer {
   display: grid;
   background: var(--night);
@@ -1548,4 +1435,205 @@ select {
 
 .usage__limit[data-status='limited'] {
   color: var(--bad);
+}
+
+/* Conversation, like a chat app: newest at the bottom, older messages scroll up */
+
+.chat {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  margin: 0 -20px;
+  padding: 0 20px;
+  overflow-y: auto;
+}
+
+.chat__empty {
+  display: grid;
+  gap: 10px;
+  align-content: end;
+  min-height: 100%;
+  padding-bottom: 8px;
+}
+
+.chat__hello {
+  margin: 0;
+  font: 400 18px var(--pixel);
+  color: var(--lamp);
+}
+
+.chat__log {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 4px 0 8px;
+  list-style: none;
+  font-size: 14px;
+}
+
+.msg {
+  display: grid;
+  gap: 4px;
+}
+
+.msg--user {
+  justify-items: end;
+  margin-top: 6px;
+}
+
+.msg__meta {
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.msg__bubble {
+  max-width: 88%;
+  padding: 8px 12px;
+  background: var(--plum-raised);
+  border: 1px solid var(--line);
+  border-radius: 12px 12px 2px 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.msg__who {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font: 400 12px var(--pixel);
+}
+
+.msg__who canvas {
+  width: 20px;
+  height: 18px;
+  image-rendering: pixelated;
+}
+
+.msg__text {
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.event {
+  font-size: 12.5px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.event__who {
+  margin-right: 6px;
+  font: 400 11px var(--pixel);
+}
+
+.event[data-kind='error'] {
+  color: var(--bad);
+}
+
+.event[data-kind='result'] {
+  color: var(--ok);
+}
+
+.event[data-kind='task'] summary {
+  cursor: pointer;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.event__full {
+  margin: 6px 0 0;
+  padding: 8px;
+  background: var(--night);
+  border-radius: 4px;
+  white-space: pre-wrap;
+}
+
+/* Bottom of the panel: things waiting on the user, the plan, and the message box */
+
+.dock {
+  display: grid;
+  gap: 8px;
+}
+
+.dock__cards {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dock__cards:empty {
+  display: none;
+}
+
+.composer__to {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 8px 0 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.targets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.target {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px 2px 4px;
+  background: transparent;
+  color: var(--muted);
+  font: 600 12px var(--body);
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.target:first-child {
+  padding-left: 8px;
+}
+
+.target canvas {
+  width: 15px;
+  height: 14px;
+  image-rendering: pixelated;
+}
+
+.target:hover {
+  color: var(--text);
+}
+
+.target[aria-checked='true'] {
+  background: var(--lamp);
+  color: #2a1d0b;
+  box-shadow: none;
+}
+
+.target:not([data-status='idle']):not([data-status='done'])[data-status] canvas {
+  filter: drop-shadow(0 0 2px var(--lamp));
+}
+
+.composer__stop {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: var(--text);
+  color: var(--night);
+  border-radius: 50%;
+}
+
+.composer__stop svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
 }

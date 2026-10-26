@@ -53,10 +53,13 @@ const state = {
   models: { claude: [], codex: [], antigravity: [] } as ModelCatalog,
   project: '',
   selectedId: undefined as string | undefined,
+  /** Who the message box talks to: the whole team (general command) or one agent. */
+  target: 'equipe' as string,
 };
 
 const scene = new Scene($<HTMLCanvasElement>('scene'));
 let socket: WebSocket | undefined;
+const commandField = $<HTMLTextAreaElement>('command');
 const shell = new ShellDock($('shell'), $('shell-screen'), $('shell-cwd'), (msg) => send(msg), () => {
   $('open-shell').setAttribute('aria-pressed', String(shell.visible));
 });
@@ -385,7 +388,7 @@ function renderDesk() {
   const desk = $('desk');
   desk.hidden = !agent;
   if (!agent) return;
-  $('desk-name').textContent = `Falar com ${agent.name}`;
+  $('desk-name').textContent = agent.name;
   renderStress(agent);
   const tokens = agent.usage.inputTokens + agent.usage.outputTokens;
   $('desk-activity').textContent =
@@ -393,13 +396,7 @@ function renderDesk() {
       ? `${formatTokens(tokens)} tokens nesta sessão` + (agent.usage.costUsd ? ` (≈ US$ ${agent.usage.costUsd.toFixed(2)} se fosse API)` : '')
       : 'Ainda não trabalhou nesta sessão.';
   renderToolkit(agent);
-  $('task-form').hidden = !agent.controllable;
   $('watch-only').hidden = agent.controllable;
-  $('task-label').textContent = state.project ? `O que ${agent.name} deve fazer?` : `Mensagem para ${agent.name}`;
-  $('desk-lobby').hidden = !!state.project;
-  const busy = BUSY.includes(agent.status);
-  $<HTMLButtonElement>('send').disabled = busy;
-  $<HTMLButtonElement>('stop').disabled = !busy;
 }
 
 function accountOf(agent: AgentView): Account | undefined {
@@ -501,24 +498,46 @@ function formatTokens(n: number) {
 /** Plan steps the user expanded, kept open across re-renders. */
 const openSteps = new Set<number>();
 
-/** Coordinator portrait, an arrow, then whoever takes the steps: the order a command travels. */
-function renderCrewLine(coordinator: AgentView | undefined) {
-  const workers = state.agents.filter((a) => a.roleKey === 'executor' || a.roleKey === 'revisor');
-  const face = (agent: AgentView) => {
-    const span = el('span', 'crew-face');
-    span.title = `${agent.name}: ${ROLE_NAMES[agent.roleKey ?? 'folga'] ?? ''}`;
-    span.dataset.status = agent.status;
-    span.append(portrait(agent));
-    return span;
-  };
-  const line = $('command-crew');
-  if (!coordinator) return line.replaceChildren();
-  line.replaceChildren(face(coordinator), el('span', 'crew-arrow', '›'), ...workers.map(face));
+/** "Para": the whole team, or one agent, each with its portrait. */
+function renderTargets() {
+  const chips = [
+    { id: 'equipe', label: 'Equipe', agent: undefined as AgentView | undefined },
+    ...state.agents.filter((a) => a.controllable).map((agent) => ({ id: agent.id, label: agent.name, agent })),
+  ];
+  if (!chips.some((c) => c.id === state.target)) state.target = 'equipe';
+  $('targets').replaceChildren(
+    ...chips.map(({ id, label, agent }) => {
+      const chip = el('button', 'target');
+      chip.type = 'button';
+      chip.setAttribute('role', 'radio');
+      chip.setAttribute('aria-checked', String(id === state.target));
+      if (agent) {
+        chip.append(portrait(agent));
+        chip.dataset.status = agent.status;
+        chip.title = `${agent.name}: ${agent.role}`;
+      } else {
+        chip.title = 'Comando geral: o coordenador divide o trabalho';
+      }
+      chip.append(label);
+      chip.addEventListener('click', () => setTarget(id));
+      return chip;
+    }),
+  );
+}
+
+function setTarget(id: string) {
+  state.target = id;
+  if (id !== 'equipe') state.selectedId = id;
+  renderTeam();
+  renderDesk();
+  renderCommand();
+  renderLog();
+  commandField.focus();
 }
 
 function renderProject() {
   const path = state.project;
-  $('project-name').textContent = path ? (path.split(/[\/]/).filter(Boolean).pop() ?? path) : 'Nenhum projeto aberto';
+  $('project-name').textContent = path ? (path.split(/[\\/]/).filter(Boolean).pop() ?? path) : 'Nenhum projeto aberto';
   $('project-path').textContent = path || 'Os agentes só conversam até você escolher uma pasta.';
   $('project-change').textContent = path ? 'Trocar' : 'Escolher';
   $('project-edit').hidden = true;
@@ -528,20 +547,32 @@ function renderProject() {
 function renderCommand() {
   const coordinator = state.agents.find((a) => a.roleKey === 'coordenador');
   const workers = state.agents.filter((a) => a.roleKey === 'executor' || a.roleKey === 'revisor').map((a) => a.name);
-  $('command-hint').textContent = coordinator
-    ? `${coordinator.name} monta a ordem e passa cada parte para ${workers.join(', ') || 'a equipe'}.`
-    : 'Escolha um coordenador em Equipe.';
-  renderCrewLine(coordinator);
-
   const plan = state.plan;
   const running = plan?.status === 'planning' || plan?.status === 'running';
-  $<HTMLButtonElement>('send-command').disabled = running || !coordinator;
-  $('stop-plan').hidden = !running;
+  renderTargets();
+
+  const agent = state.target === 'equipe' ? undefined : agentById(state.target);
+  const busy = agent ? BUSY.includes(agent.status) : running;
+  if (agent) {
+    $('command-hint').textContent = state.project ? `Só ${agent.name} recebe.` : 'Sem projeto aberto: só conversa, não mexe em arquivos.';
+    commandField.placeholder = state.project ? `O que ${agent.name} deve fazer?` : `Mensagem para ${agent.name}`;
+  } else {
+    $('command-hint').textContent = coordinator
+      ? `${coordinator.name} divide o trabalho com ${workers.join(', ') || 'a equipe'}.`
+      : 'Escolha um coordenador em Ajustes.';
+    commandField.placeholder = 'O que a equipe deve fazer?';
+  }
+  // Like a chat app: while something runs, the send button turns into a stop button.
+  $('send-command').hidden = busy;
+  $<HTMLButtonElement>('send-command').disabled = !agent && !coordinator;
+  $('stop-plan').hidden = !busy;
   updateIdeas();
 
   const box = $('plan');
   box.hidden = !plan;
   if (!plan) return;
+  const finished = plan.steps.filter((s) => s.status === 'done' || s.status === 'skipped').length;
+  $('plan-count').textContent = plan.steps.length ? `${finished} de ${plan.steps.length} passos` : '';
   const statusText: Record<Plan['status'], string> = {
     planning: `${coordinator?.name ?? 'O coordenador'} está montando o plano…`,
     running: 'Executando o plano',
@@ -632,37 +663,73 @@ function renderNotes() {
   );
 }
 
+/** With one agent picked in "Para", the conversation shows only that agent. */
 function logVisible(entry: LogEntry) {
-  return !$<HTMLInputElement>('only-selected').checked || entry.agentId === state.selectedId;
+  return state.target === 'equipe' || entry.agentId === state.target;
 }
 
-function logItem(entry: LogEntry) {
-  const li = el('li');
+/** What the user last typed to each agent, so the agent's own copy of the task is not shown twice. */
+const lastAsked = new Map<string, string>();
+
+function logItem(entry: LogEntry): HTMLElement | undefined {
+  const agent = agentById(entry.agentId);
+  if (entry.kind === 'user') {
+    lastAsked.set(entry.agentId, entry.text.trim());
+    const li = el('li', 'msg msg--user');
+    li.append(el('p', 'msg__meta', entry.agentId === 'equipe' ? 'Você para a equipe' : `Você para ${agentName(entry.agentId)}`));
+    li.append(el('div', 'msg__bubble', entry.text));
+    return li;
+  }
+  if (entry.kind === 'task' && lastAsked.get(entry.agentId) === entry.text.trim()) return undefined;
+  if (entry.kind === 'text') {
+    const li = el('li', 'msg msg--agent');
+    const head = el('p', 'msg__who');
+    if (agent) head.append(portrait(agent));
+    const name = el('span', undefined, agentName(entry.agentId));
+    name.style.color = agent?.color ?? '';
+    head.append(name);
+    li.append(head, el('div', 'msg__text', entry.text));
+    return li;
+  }
+  // Tool calls, hand-offs and results: one quiet line each.
+  const li = el('li', 'event');
   li.dataset.kind = entry.kind;
-  const who = el('span', 'log__who', agentName(entry.agentId));
-  who.style.color = agentById(entry.agentId)?.color ?? '';
-  li.append(who, entry.text);
+  const who = el('span', 'event__who', agentName(entry.agentId));
+  who.style.color = agent?.color ?? '';
+  if (entry.kind === 'task') {
+    const box = el('details');
+    const summary = el('summary');
+    summary.append(who, el('span', 'event__text', `recebeu: ${entry.text.split('\n')[0]}`));
+    box.append(summary, el('p', 'event__full', entry.text));
+    li.append(box);
+  } else {
+    li.append(who, el('span', 'event__text', entry.text));
+  }
   return li;
 }
 
 function renderLog() {
-  const list = $('log');
-  const entries = state.log.filter(logVisible);
-  if (!entries.length) {
-    list.replaceChildren(el('li', 'log__empty', 'Nada por aqui ainda. Mande um comando geral ou fale direto com uma mesa.'));
-    return;
-  }
-  list.replaceChildren(...entries.map(logItem));
-  list.scrollTop = list.scrollHeight;
+  lastAsked.clear();
+  const items = state.log.filter(logVisible).flatMap((entry) => logItem(entry) ?? []);
+  $('chat-empty').hidden = items.length > 0;
+  $('log').replaceChildren(...items);
+  scrollChat(true);
 }
 
 function appendLog(entry: LogEntry) {
-  const list = $('log');
   if (!logVisible(entry)) return;
-  list.querySelector('.log__empty')?.remove();
-  const atBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 40;
-  list.append(logItem(entry));
-  if (atBottom) list.scrollTop = list.scrollHeight;
+  const item = logItem(entry);
+  if (!item) return;
+  const chat = $('log').parentElement!;
+  const atBottom = chat.scrollHeight - chat.scrollTop - chat.clientHeight < 80;
+  $('chat-empty').hidden = true;
+  $('log').append(item);
+  scrollChat(atBottom || entry.kind === 'user');
+}
+
+function scrollChat(force: boolean) {
+  const chat = $('log').parentElement!;
+  if (force) chat.scrollTop = chat.scrollHeight;
 }
 
 let toastTimer: number | undefined;
@@ -1024,10 +1091,12 @@ $('skill-import').addEventListener('click', () => {
 /* ---------- Actions ---------- */
 
 function select(id: string) {
+  const agent = agentById(id);
+  // A desk click picks who the message box talks to; watched-only desks just show their details.
+  if (agent?.controllable) return setTarget(id);
   state.selectedId = id;
   renderTeam();
   renderDesk();
-  renderLog();
 }
 
 $('scene').addEventListener('click', (event) => {
@@ -1035,18 +1104,10 @@ $('scene').addEventListener('click', (event) => {
   const id = scene.hit(event.clientX - rect.left, event.clientY - rect.top);
   if (id) {
     select(id);
-    $<HTMLTextAreaElement>('task').focus();
   }
 });
 
-function submitOnCtrlEnter(fieldId: string, formId: string) {
-  $(fieldId).addEventListener('keydown', (event) => {
-    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) $<HTMLFormElement>(formId).requestSubmit();
-  });
-}
-submitOnCtrlEnter('task', 'task-form');
-// The general command reads like a chat box: Enter sends, Shift + Enter starts a new line.
-const commandField = $<HTMLTextAreaElement>('command');
+// The message box reads like a chat: Enter sends, Shift + Enter starts a new line.
 commandField.addEventListener('keydown', (event) => {
   if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
     event.preventDefault();
@@ -1060,10 +1121,9 @@ function growCommand() {
 }
 commandField.addEventListener('input', growCommand);
 
-/** Ready-made commands, shown only while the box is empty and nothing is running. */
+/** Ready-made commands, shown with the empty conversation while the box is empty. */
 function updateIdeas() {
-  const running = state.plan?.status === 'planning' || state.plan?.status === 'running';
-  $('command-ideas').hidden = running || commandField.value.trim() !== '';
+  $('command-ideas').hidden = commandField.value.trim() !== '';
 }
 for (const idea of document.querySelectorAll<HTMLButtonElement>('.idea')) {
   idea.addEventListener('click', () => {
@@ -1097,27 +1157,19 @@ $('project-change').addEventListener('click', () => {
   $<HTMLInputElement>('project').focus();
 });
 
-$('task-form').addEventListener('submit', (event) => {
-  event.preventDefault();
-  const field = $<HTMLTextAreaElement>('task');
-  if (!state.selectedId || !field.value.trim()) return;
-  send({ type: 'task', agentId: state.selectedId, prompt: field.value });
-  field.value = '';
-});
-
 $('command-form').addEventListener('submit', (event) => {
   event.preventDefault();
-  const field = $<HTMLTextAreaElement>('command');
-  if (!field.value.trim()) return;
-  send({ type: 'command', prompt: field.value });
-  field.value = '';
+  const prompt = commandField.value;
+  if (!prompt.trim()) return;
+  if (state.target === 'equipe') send({ type: 'command', prompt });
+  else send({ type: 'task', agentId: state.target, prompt });
+  commandField.value = '';
   growCommand();
 });
 
-$('stop-plan').addEventListener('click', () => send({ type: 'stop-plan' }));
-
-$('stop').addEventListener('click', () => {
-  if (state.selectedId) send({ type: 'stop', agentId: state.selectedId });
+$('stop-plan').addEventListener('click', () => {
+  if (state.target === 'equipe') send({ type: 'stop-plan' });
+  else send({ type: 'stop', agentId: state.target });
 });
 
 // Only in the desktop app: the native Windows folder picker.
@@ -1138,7 +1190,6 @@ $('project-form').addEventListener('submit', (event) => {
   send({ type: 'project', path: $<HTMLInputElement>('project').value });
 });
 
-$('only-selected').addEventListener('change', renderLog);
 
 /* ---------- Loop ---------- */
 

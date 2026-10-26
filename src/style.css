@@ -882,90 +882,11 @@ select {
   background: #3a3150;
 }
 
-/* Usage: limits per account, spend per agent */
+/* Usage: tasks and limit per agent */
 
 .usage {
   display: grid;
   gap: 10px;
-}
-
-.quota {
-  display: grid;
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.quota__row {
-  display: grid;
-  gap: 6px;
-  padding: 10px 12px;
-  border-radius: 6px;
-  background: var(--plum-raised);
-  border-left: 3px solid var(--line);
-}
-
-.quota__row[data-status='ok'] {
-  border-left-color: var(--ok);
-}
-
-.quota__row[data-status='warning'] {
-  border-left-color: var(--note);
-}
-
-.quota__row[data-status='limited'] {
-  border-left-color: var(--bad);
-}
-
-.quota__head {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.quota__name {
-  font-weight: 700;
-}
-
-.quota__state {
-  font-size: 13px;
-  color: var(--muted);
-}
-
-.quota__row[data-status='limited'] .quota__state {
-  color: var(--bad);
-}
-
-.quota__row[data-status='warning'] .quota__state {
-  color: var(--note);
-}
-
-.quota__bar {
-  height: 8px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.quota__bar span {
-  display: block;
-  height: 100%;
-  background: var(--ok);
-}
-
-.quota__row[data-status='warning'] .quota__bar span {
-  background: var(--note);
-}
-
-.quota__row[data-status='limited'] .quota__bar span {
-  background: var(--bad);
-}
-
-.quota__detail {
-  margin: 0;
-  font-size: 12.5px;
-  color: var(--muted);
 }
 
 .usage__table {
@@ -1619,4 +1540,12 @@ select {
 .idea:focus-visible {
   color: var(--text);
   box-shadow: inset 0 0 0 1px var(--lamp);
+}
+
+.usage__limit[data-status='warning'] {
+  color: var(--lamp);
+}
+
+.usage__limit[data-status='limited'] {
+  color: var(--bad);
 }

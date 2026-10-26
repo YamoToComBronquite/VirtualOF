@@ -8,11 +8,6 @@ const WALL_BOTTOM = 72;
 
 const C = {
   outline: '#1b1626',
-  wall: '#2e2645',
-  wallStripe: '#2a2240',
-  wainscot: '#241d38',
-  wainscotPanel: '#2b2343',
-  trim: '#3d3358',
   floorLine: '#3e2a1d',
   plank: ['#7a5236', '#744e33', '#6f4a31', '#7e5539'],
   plankLight: 'rgba(255, 220, 170, 0.07)',
@@ -28,6 +23,44 @@ const C = {
   ok: '#5fbf6a',
   bad: '#e0574b',
   lamp: '244, 194, 107',
+};
+
+/** How the room looks; chosen in the Ambiente window and kept in the browser. */
+export interface Theme {
+  periodo: 'noite' | 'entardecer' | 'dia';
+  parede: 'ameixa' | 'floresta' | 'terracota' | 'grafite';
+  piso: 'madeira' | 'carpete' | 'xadrez';
+  gato: boolean;
+  tapete: boolean;
+  plantas: boolean;
+  /** Coffee corner and server rack. */
+  extras: boolean;
+}
+
+export const DEFAULT_THEME: Theme = {
+  periodo: 'noite',
+  parede: 'ameixa',
+  piso: 'madeira',
+  gato: true,
+  tapete: true,
+  plantas: true,
+  extras: true,
+};
+
+const WALLS: Record<Theme['parede'], { wall: string; stripe: string; wainscot: string; panel: string; trim: string }> = {
+  ameixa: { wall: '#2e2645', stripe: '#2a2240', wainscot: '#241d38', panel: '#2b2343', trim: '#3d3358' },
+  floresta: { wall: '#22382f', stripe: '#1f332b', wainscot: '#1a2b24', panel: '#20342b', trim: '#2f4a3e' },
+  terracota: { wall: '#4a2c26', stripe: '#442822', wainscot: '#36201b', panel: '#402620', trim: '#5c3a31' },
+  grafite: { wall: '#2b2d33', stripe: '#27292f', wainscot: '#202227', panel: '#26282e', trim: '#3a3d45' },
+};
+
+const PERIODS: Record<
+  Theme['periodo'],
+  { top: string; bottom: string; building: string; cloud: string; light: string; lightAlpha: number; vignette: number; wash?: string }
+> = {
+  noite: { top: '#0c1130', bottom: '#2d3166', building: '#151833', cloud: 'rgba(40, 46, 96, 0.85)', light: '150, 170, 255', lightAlpha: 0.07, vignette: 0.4 },
+  entardecer: { top: '#2b2350', bottom: '#f0905a', building: '#2a2140', cloud: 'rgba(150, 80, 110, 0.8)', light: '255, 170, 110', lightAlpha: 0.1, vignette: 0.3, wash: 'rgba(255, 150, 90, 0.05)' },
+  dia: { top: '#6cb4e4', bottom: '#cfe8f5', building: '#56688c', cloud: 'rgba(255, 255, 255, 0.9)', light: '255, 245, 210', lightAlpha: 0.13, vignette: 0.12, wash: 'rgba(255, 250, 235, 0.07)' },
 };
 
 const SKINS = ['#f3cba5', '#e0ac84', '#b97d58', '#8a5a3c', '#5e3b28'];
@@ -210,6 +243,9 @@ export class Scene {
   selectedId?: string;
   /** How close each agent's account is to its limit; drives the bar, sweat and steam. */
   stress = new Map<string, Stress>();
+  theme: Theme = { ...DEFAULT_THEME };
+  /** The user's own picture for the window view, already shrunk to the window's size. */
+  view?: CanvasImageSource;
   doneCount = 0;
   /** When each agent last finished, so the check mark shows for a few seconds. */
   private finishedAt = new Map<string, number>();
@@ -250,8 +286,10 @@ export class Scene {
   draw(time: number) {
     this.wall(time);
     this.floor();
-    this.furniture();
-    DESKS.forEach((desk, i) => this.desk(desk.x, desk.y, this.agents[i], time));
+    this.moonlight(time);
+    if (this.theme.tapete) this.runner();
+    this.furniture(time);
+    DESKS.forEach((desk, i) => this.desk(desk.x, desk.y, this.agents[i], time, i));
     this.vignette();
 
     const { screen } = this;
@@ -280,31 +318,24 @@ export class Scene {
   /* ---------- Room ---------- */
 
   private wall(time: number) {
-    this.rect(0, 0, W, WALL_BOTTOM, C.wall);
-    for (let x = 4; x < W; x += 12) this.rect(x, 0, 2, 50, C.wallStripe);
+    const walls = WALLS[this.theme.parede];
+    this.rect(0, 0, W, WALL_BOTTOM, walls.wall);
+    for (let x = 4; x < W; x += 12) this.rect(x, 0, 2, 50, walls.stripe);
     // Wainscot with recessed panels, then the trim
-    this.rect(0, 50, W, WALL_BOTTOM - 50, C.wainscot);
-    for (let x = 6; x < W - 20; x += 30) this.rect(x, 54, 24, 13, C.wainscotPanel);
-    this.rect(0, 49, W, 2, C.trim);
+    this.rect(0, 50, W, WALL_BOTTOM - 50, walls.wainscot);
+    for (let x = 6; x < W - 20; x += 30) this.rect(x, 54, 24, 13, walls.panel);
+    this.rect(0, 49, W, 2, walls.trim);
     this.rect(0, WALL_BOTTOM - 2, W, 2, '#1a1428');
 
-    // Window onto the city at night, with curtains
+    // Window with curtains: the city at the chosen time of day, or the user's own picture
     this.box(128, 6, 128, 42, '#4d4066');
-    const sky = this.ctx.createLinearGradient(0, 9, 0, 45);
-    sky.addColorStop(0, '#0c1130');
-    sky.addColorStop(1, '#2d3166');
-    this.ctx.fillStyle = sky;
-    this.ctx.fillRect(132, 10, 120, 34);
-    for (const s of STARS) if (Math.sin(time / 800 + s.x * 3) > -0.5) this.rect(s.x, s.y, 1, 1, '#e8e4ff');
-    this.rect(226, 13, 7, 7, '#f3ecc8');
-    this.rect(229, 13, 4, 5, '#22265a');
-    for (const b of SKYLINE) {
-      this.rect(b.x, 44 - b.h, 7, b.h, '#151833');
-      b.lit.forEach((on, i) => {
-        const wy = 44 - b.h + 3 + Math.floor(i / 2) * 4;
-        if (on && wy < 42) this.rect(b.x + 1 + (i % 2) * 3, wy, 2, 2, '#e9b45a');
-      });
-    }
+    this.ctx.save();
+    this.ctx.beginPath();
+    this.ctx.rect(132, 10, 120, 34);
+    this.ctx.clip();
+    if (this.view) this.ctx.drawImage(this.view, 132, 10, 120, 34);
+    else this.city(time);
+    this.ctx.restore();
     this.rect(191, 10, 2, 34, '#4d4066');
     this.rect(132, 26, 120, 2, '#4d4066');
     this.box(122, 46, 140, 4, '#5e4f7a');
@@ -314,6 +345,7 @@ export class Scene {
       this.rect(side + 9, 4, 1, 44, '#5a2634');
     }
     this.rect(112, 3, 160, 2, '#3a2f50');
+    if (this.theme.gato) this.cat(time);
 
     // Bookshelf
     this.box(12, 10, 46, 58, '#5c3f2b');
@@ -360,16 +392,35 @@ export class Scene {
   }
 
   private floor() {
-    const plankH = 6;
-    for (let y = WALL_BOTTOM, row = 0; y < H; y += plankH, row++) {
-      const p = PLANKS[row % PLANKS.length];
-      this.rect(0, y, W, plankH, C.plank[p.color]);
-      this.rect(0, y, W, 1, C.plankLight);
-      this.rect(0, y + plankH - 1, W, 1, C.floorLine);
-      // Board ends, staggered per row so it reads as a wooden floor
-      for (let x = p.offset; x < W; x += 74) {
-        this.rect(x, y, 1, plankH - 1, C.floorLine);
-        this.rect(x + 1, y, 1, plankH - 1, 'rgba(255, 220, 170, 0.06)');
+    if (this.theme.piso === 'carpete') {
+      this.rect(0, WALL_BOTTOM, W, H - WALL_BOTTOM, '#3d4a5c');
+      // Speckles give the carpet its texture
+      PLANKS.forEach((p, i) => {
+        for (let k = 0; k < 6; k++) {
+          const x = (p.offset * 5 + k * 67 + i * 13) % W;
+          const y = WALL_BOTTOM + ((i * 11 + k * 23) % (H - WALL_BOTTOM));
+          this.rect(x, y, 1, 1, k % 2 ? '#47566a' : '#35404f');
+        }
+      });
+    } else if (this.theme.piso === 'xadrez') {
+      for (let y = WALL_BOTTOM, row = 0; y < H; y += 8, row++) {
+        for (let x = 0, col = 0; x < W; x += 16, col++) {
+          this.rect(x, y, 16, 8, (row + col) % 2 ? '#5c5468' : '#a89f8f');
+          this.rect(x, y, 16, 1, 'rgba(255, 255, 255, 0.06)');
+        }
+      }
+    } else {
+      const plankH = 6;
+      for (let y = WALL_BOTTOM, row = 0; y < H; y += plankH, row++) {
+        const p = PLANKS[row % PLANKS.length];
+        this.rect(0, y, W, plankH, C.plank[p.color]);
+        this.rect(0, y, W, 1, C.plankLight);
+        this.rect(0, y + plankH - 1, W, 1, C.floorLine);
+        // Board ends, staggered per row so it reads as a wooden floor
+        for (let x = p.offset; x < W; x += 74) {
+          this.rect(x, y, 1, plankH - 1, C.floorLine);
+          this.rect(x + 1, y, 1, plankH - 1, 'rgba(255, 220, 170, 0.06)');
+        }
       }
     }
     // Shadow where the wall meets the floor
@@ -380,15 +431,186 @@ export class Scene {
     this.ctx.fillRect(0, WALL_BOTTOM, W, 10);
   }
 
-  private furniture() {
+  /** The view out of the window: sky, sun or moon, clouds and the skyline. */
+  private city(time: number) {
+    const period = this.theme.periodo;
+    const look = PERIODS[period];
+    const sky = this.ctx.createLinearGradient(0, 9, 0, 45);
+    sky.addColorStop(0, look.top);
+    sky.addColorStop(1, look.bottom);
+    this.ctx.fillStyle = sky;
+    this.ctx.fillRect(132, 10, 120, 34);
+
+    if (period === 'noite') {
+      for (const s of STARS) if (Math.sin(time / 800 + s.x * 3) > -0.5) this.rect(s.x, s.y, 1, 1, '#e8e4ff');
+      this.shootingStar(time);
+      this.rect(226, 13, 7, 7, '#f3ecc8');
+      this.rect(229, 13, 4, 5, '#22265a');
+    } else if (period === 'entardecer') {
+      this.rect(202, 28, 14, 10, '#ffb36b'); // the sun setting behind the buildings
+      this.rect(204, 26, 10, 2, '#ffc98a');
+      this.rect(206, 25, 6, 1, '#ffd9a6');
+    } else {
+      this.rect(222, 13, 8, 8, '#fff3b0');
+      this.rect(221, 15, 10, 4, '#fff3b0');
+      this.rect(224, 12, 4, 10, '#fff3b0');
+    }
+
+    // Two slow clouds drift across
+    for (const [speed, y, offset] of [
+      [260, 15, 0],
+      [380, 22, 70],
+    ] as const) {
+      const x = 120 + ((time / speed + offset) % 150);
+      this.rect(x, y, 16, 3, look.cloud);
+      this.rect(x + 3, y - 2, 9, 2, look.cloud);
+      this.rect(x + 5, y - 3, 4, 1, look.cloud);
+    }
+
+    const tallest = SKYLINE.reduce((a, b) => (b.h > a.h ? b : a));
+    for (const b of SKYLINE) {
+      this.rect(b.x, 44 - b.h, 7, b.h, look.building);
+      if (period === 'dia') continue; // nobody needs the lights on in daylight
+      b.lit.forEach((on, i) => {
+        // A few windows switch on and off over time, like people at home
+        const flickers = (b.x + i * 7) % 9 === 0;
+        const lit = (flickers ? Math.sin(time / 4000 + b.x + i) > 0 : on) && (period === 'noite' || i % 2 === 0);
+        const wy = 44 - b.h + 3 + Math.floor(i / 2) * 4;
+        if (lit && wy < 42) this.rect(b.x + 1 + (i % 2) * 3, wy, 2, 2, '#e9b45a');
+      });
+    }
+    this.rect(tallest.x + 3, 44 - tallest.h - 3, 1, 3, '#2a2f55');
+    if (Math.floor(time / 700) % 2) this.rect(tallest.x + 3, 44 - tallest.h - 4, 1, 1, '#ff5a4a');
+  }
+
+  /** A streak crosses the sky for a moment every half minute or so. */
+  private shootingStar(time: number) {
+    const cycle = time % 27000;
+    if (cycle > 700) return;
+    const t = cycle / 700;
+    const x = 240 - t * 70;
+    const y = 12 + t * 14;
+    for (let i = 0; i < 6; i++) this.rect(Math.round(x + i * 2), Math.round(y - i), 1, 1, `rgba(255, 250, 220, ${0.9 - i * 0.15})`);
+  }
+
+  /** The office cat, asleep on the windowsill, tail swishing now and then. */
+  private cat(time: number) {
+    const x = 236;
+    const y = 39;
+    const ink = C.outline;
+    this.rect(x, y + 2, 13, 5, ink);
+    this.rect(x + 1, y + 3, 11, 3, '#3b3346');
+    this.rect(x + 9, y, 6, 5, ink); // head
+    this.rect(x + 10, y + 1, 4, 3, '#3b3346');
+    this.rect(x + 9, y - 1, 1, 1, ink); // ears
+    this.rect(x + 14, y - 1, 1, 1, ink);
+    // Eyes stay shut, opening a crack once in a while
+    const peek = Math.floor(time / 150) % 60 === 0;
+    this.rect(x + 11, y + 2, 1, 1, peek ? '#f2d974' : '#2b2433');
+    this.rect(x + 13, y + 2, 1, 1, peek ? '#f2d974' : '#2b2433');
+    const swish = Math.floor(time / 500) % 4;
+    const tail = [0, 1, 2, 1][swish];
+    this.rect(x - 4, y + 5 - tail, 5, 1, ink);
+    this.rect(x - 5, y + 4 - tail, 1, 2, ink);
+  }
+
+  /** Light falls through the window onto the floor, with dust drifting in it. */
+  private moonlight(time: number) {
+    const { ctx } = this;
+    const look = PERIODS[this.theme.periodo];
+    ctx.fillStyle = `rgba(${look.light}, ${look.lightAlpha})`;
+    for (const [from, to] of [
+      [140, 189],
+      [195, 246],
+    ]) {
+      ctx.beginPath();
+      ctx.moveTo(from, WALL_BOTTOM);
+      ctx.lineTo(to, WALL_BOTTOM);
+      ctx.lineTo(to - 34, 128);
+      ctx.lineTo(from - 34, 128);
+      ctx.closePath();
+      ctx.fill();
+    }
+    for (let i = 0; i < 7; i++) {
+      const drift = (time / (2600 + i * 400) + i * 0.37) % 1;
+      const x = 150 + ((i * 29) % 80) - drift * 30;
+      const y = WALL_BOTTOM + 6 + drift * 48;
+      this.rect(Math.round(x), Math.round(y), 1, 1, `rgba(220, 228, 255, ${0.35 * Math.sin(drift * Math.PI)})`);
+    }
+  }
+
+  /** A long rug down the aisle between the two rows of desks. */
+  private runner() {
+    this.rect(22, 146, 340, 12, '#4a2330');
+    this.rect(24, 147, 336, 10, '#7a3b4a');
+    this.rect(26, 149, 332, 6, '#6a3240');
+    for (let x = 34; x < 352; x += 14) {
+      this.rect(x, 151, 2, 2, '#c07a5a');
+      this.rect(x - 2, 152, 6, 1, '#a8645a');
+    }
+    for (let x = 22; x < 362; x += 3) {
+      this.rect(x, 145, 1, 1, '#a8645a'); // fringe
+      this.rect(x, 158, 1, 1, '#a8645a');
+    }
+  }
+
+  private furniture(time: number) {
     // Water cooler
     this.box(266, 34, 12, 14, '#9fd3f0', '#2b3a4a');
     this.rect(268, 36, 3, 8, 'rgba(255,255,255,0.4)');
     this.box(264, 47, 16, 24, '#d9dde6', '#5b6475');
     this.rect(269, 53, 6, 3, '#5b6475');
-    this.plant(10, 196);
-    this.plant(372, 196);
-    this.plant(102, 52);
+    if (this.theme.plantas) {
+      this.plant(10, 196);
+      this.plant(372, 196);
+      this.plant(102, 52);
+    }
+    if (this.theme.extras) {
+      this.coffeeCorner(time);
+      this.serverRack(time);
+    }
+  }
+
+  /** Coffee machine on a little cabinet, by the bookshelf. */
+  private coffeeCorner(time: number) {
+    this.rect(5, 117, 24, 3, C.deskShadow);
+    this.box(4, 88, 26, 30, '#5c3f2b');
+    this.rect(6, 102, 22, 1, '#3e2a1d');
+    this.rect(16, 94, 2, 3, '#c9a36a'); // knobs
+    this.rect(16, 108, 2, 3, '#c9a36a');
+    this.box(8, 70, 18, 19, '#3a3f52');
+    this.rect(10, 72, 14, 4, '#22252f');
+    this.rect(11, 73, 2, 2, Math.floor(time / 900) % 2 ? '#5fd86f' : '#2f6b37');
+    this.rect(15, 76, 4, 4, '#22252f'); // spout
+    this.box(14, 82, 6, 6, '#e8e2d2', '#6b5a48');
+    this.steam(17, 80, time, 2);
+  }
+
+  /** Blinks faster the more agents are working. */
+  private serverRack(time: number) {
+    const busy = this.agents.filter((a) => ACTIVE.includes(a.status)).length;
+    this.rect(357, 117, 22, 3, C.deskShadow);
+    this.box(356, 56, 24, 62, '#2a2d3a');
+    for (let slot = 0; slot < 6; slot++) {
+      const y = 59 + slot * 9;
+      this.rect(358, y, 20, 7, '#1d2029');
+      this.rect(360, y + 3, 9, 1, '#3a3f52');
+      for (let led = 0; led < 3; led++) {
+        const rate = 900 - busy * 220;
+        const on = Math.sin(time / Math.max(120, rate) + slot * 1.7 + led * 2.3) > 0.2;
+        const color = led === 2 ? (busy ? '#f2c14e' : '#3a3f52') : '#5fd86f';
+        this.rect(371 + led * 2, y + 2, 1, 2, on ? color : '#24402a');
+      }
+    }
+  }
+
+  /** Little wisps rising from a hot drink. */
+  private steam(x: number, y: number, time: number, strength: number) {
+    for (let i = 0; i < strength + 1; i++) {
+      const phase = (time / 600 + i * 0.5) % 1;
+      const sway = Math.round(Math.sin(phase * Math.PI * 2 + i) * 1.2);
+      this.rect(x + sway + i - 1, Math.round(y - phase * 7), 1, 2, `rgba(230, 230, 240, ${0.55 * (1 - phase)})`);
+    }
   }
 
   private plant(x: number, y: number) {
@@ -410,7 +632,55 @@ export class Scene {
 
   /* ---------- Desks and people ---------- */
 
-  private desk(cx: number, top: number, agent: AgentView | undefined, time: number) {
+  /** Articulated desk lamp at the left end; on while the agent works, with a warm cone. */
+  private deskLamp(left: number, top: number, on: boolean) {
+    if (on) {
+      const { ctx } = this;
+      ctx.fillStyle = `rgba(${C.lamp}, 0.16)`;
+      ctx.beginPath();
+      ctx.moveTo(left + 7, top - 17);
+      ctx.lineTo(left + 12, top - 17);
+      ctx.lineTo(left + 34, top + 5);
+      ctx.lineTo(left - 2, top + 5);
+      ctx.closePath();
+      ctx.fill();
+    }
+    this.box(left + 1, top - 4, 8, 3, '#3a3f52');
+    this.rect(left + 4, top - 16, 1, 12, '#565b70');
+    this.rect(left + 5, top - 17, 3, 1, '#565b70');
+    this.box(left + 6, top - 21, 8, 5, on ? '#e3a04f' : '#4a4f63');
+    this.rect(left + 8, top - 16, 4, 1, on ? '#fff1c4' : '#2a2d3a');
+  }
+
+  /** Something personal on each desk, picked from the desk's position so it never changes. */
+  private keepsake(x: number, top: number, index: number) {
+    switch (index % 4) {
+      case 0: // small plant
+        this.box(x, top - 6, 6, 5, '#b0663f', '#5a2e1c');
+        this.rect(x + 1, top - 10, 1, 4, '#4f9a5c');
+        this.rect(x + 3, top - 11, 1, 5, '#62ae6c');
+        this.rect(x + 4, top - 9, 2, 1, '#4f9a5c');
+        break;
+      case 1: // stack of books
+        this.rect(x - 1, top - 3, 9, 2, '#4f7fb3');
+        this.rect(x, top - 5, 8, 2, '#c0544a');
+        this.rect(x - 1, top - 7, 8, 2, '#d9a441');
+        break;
+      case 2: // photo frame
+        this.box(x, top - 9, 7, 8, '#d4a874', '#6b4a2a');
+        this.rect(x + 1, top - 8, 5, 3, '#7cc4e8');
+        this.rect(x + 1, top - 5, 5, 3, '#62ae6c');
+        break;
+      default: // cactus
+        this.box(x + 1, top - 4, 5, 4, '#c9a36a', '#6b4a2a');
+        this.rect(x + 2, top - 11, 3, 7, '#4f9a5c');
+        this.rect(x, top - 9, 2, 1, '#4f9a5c');
+        this.rect(x, top - 10, 1, 1, '#4f9a5c');
+        this.rect(x + 3, top - 10, 1, 1, '#9fd87b');
+    }
+  }
+
+  private desk(cx: number, top: number, agent: AgentView | undefined, time: number, index: number) {
     const left = cx - DESK_W / 2;
     const selected = agent && agent.id === this.selectedId;
 
@@ -446,10 +716,13 @@ export class Scene {
     this.rect(left - 1, top - 3, DESK_W + 2, 1, C.deskTopLight);
 
     // Things on the desk
+    this.deskLamp(left, top, !!active);
+    this.keepsake(left + 15, top, index);
     this.box(cx - 10, top - 1, 20, 5, '#4a4f63');
     for (let k = 0; k < 4; k++) this.rect(cx - 8 + k * 4, top + 1, 3, 1, '#7d849c');
-    this.box(left + 4, top - 2, 6, 6, '#e8e2d2', '#6b5a48');
-    this.rect(left + 5, top - 1, 4, 1, '#6b4a2a');
+    this.box(cx - 18, top - 3, 6, 6, '#e8e2d2', '#6b5a48');
+    this.rect(cx - 17, top - 2, 4, 1, '#6b4a2a');
+    if (active) this.steam(cx - 15, top - 5, time, 1);
     if (agent) this.hands(cx, top, agent, time);
     this.monitor(cx + 20, top - 20, agent?.status ?? 'idle', time);
 
@@ -637,10 +910,16 @@ export class Scene {
     ctx.fillText(agent.name, this.offsetX + px(cx), sy + px(5) + 1, (DESK_W - 10) * s);
   }
 
+  /** Darker corners at night, a warm or bright wash by day, so the room matches the window. */
   private vignette() {
+    const look = PERIODS[this.theme.periodo];
+    if (look.wash) {
+      this.ctx.fillStyle = look.wash;
+      this.ctx.fillRect(0, 0, W, H);
+    }
     const v = this.ctx.createRadialGradient(W / 2, H / 2, 80, W / 2, H / 2, 250);
     v.addColorStop(0, 'rgba(10, 8, 20, 0)');
-    v.addColorStop(1, 'rgba(10, 8, 20, 0.4)');
+    v.addColorStop(1, `rgba(10, 8, 20, ${look.vignette})`);
     this.ctx.fillStyle = v;
     this.ctx.fillRect(0, 0, W, H);
   }

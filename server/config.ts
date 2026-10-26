@@ -2,12 +2,13 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { Lang, RoleKey } from '../shared/types.ts';
+import { DESK_COUNT, type AgentKind, type Lang, type RoleKey } from '../shared/types.ts';
 
 export interface AgentConfig {
   id: string;
+  /** Named after its AI ("Claude", "Gemini 2"); see nameAgents. Not saved. */
   nome: string;
-  tipo: 'claude' | 'codex' | 'antigravity';
+  tipo: AgentKind;
   papel: RoleKey;
   cor: string;
   /** Nickname chosen in Configurações. */
@@ -16,12 +17,27 @@ export interface AgentConfig {
   modelo?: string;
 }
 
-type SavedMember = { id: string; papel: RoleKey; apelido?: string; modelo?: string };
+type SavedMember = Omit<AgentConfig, 'nome'>;
+
+export const ENGINE_NAMES: Record<AgentKind, string> = { claude: 'Claude', codex: 'Codex', antigravity: 'Gemini', opencode: 'OpenCode' };
+
+/** Names each desk after its AI, numbering repeats in desk order ("Claude", "Claude 2"). */
+export function nameAgents(agents: AgentConfig[]) {
+  const taken = new Set<string>();
+  for (const agent of agents) {
+    const base = ENGINE_NAMES[agent.tipo];
+    let name = base;
+    for (let n = 2; taken.has(name); n++) name = `${base} ${n}`;
+    taken.add(name);
+    agent.nome = name;
+  }
+}
 
 export interface OfficeConfig {
   porta: number;
   projeto: string;
   papeis: Record<Exclude<RoleKey, 'folga'>, { nome: string; instrucoes: string }>;
+  /** The team the user put together in Configurações; the office starts with empty desks. */
   agentes: AgentConfig[];
   antigravity: { pasta: string; ativoSegundos: number; maximo: number };
   /** Hand work to an agent on another account when one hits its limit (default on). */
@@ -33,8 +49,8 @@ export interface OfficeConfig {
 interface LocalSettings {
   projeto?: string;
   trocaAutomatica?: boolean;
-  /** Team order, roles, nicknames and models, as chosen in Configurações. */
-  equipe?: SavedMember[];
+  /** Who sits at each desk, in desk order, as chosen in Configurações. */
+  equipe?: Partial<SavedMember>[];
   idioma?: Lang;
 }
 
@@ -58,15 +74,12 @@ export function loadConfig(): OfficeConfig {
   if (local.projeto !== undefined) config.projeto = local.projeto;
   if (local.trocaAutomatica !== undefined) config.trocaAutomatica = local.trocaAutomatica;
   if (local.idioma) config.idioma = local.idioma;
-  if (local.equipe) {
-    const byId = new Map(config.agentes.map((a) => [a.id, a]));
-    const ordered = local.equipe.flatMap(({ id, ...saved }) => {
-      const agent = byId.get(id);
-      byId.delete(id);
-      return agent ? [{ ...agent, ...saved }] : [];
-    });
-    config.agentes = [...ordered, ...byId.values()]; // agents added to the file later go last
-  }
+  // Teams saved before desks had their own AI and color carry neither; those start over empty.
+  config.agentes = (local.equipe ?? [])
+    .filter((m): m is SavedMember => !!(m.id && m.tipo && m.tipo in ENGINE_NAMES && m.papel && m.cor))
+    .slice(0, DESK_COUNT)
+    .map((m) => ({ ...m, nome: '' }));
+  nameAgents(config.agentes);
   config.antigravity.pasta = config.antigravity.pasta.replace(/^~/, homedir());
   return config;
 }

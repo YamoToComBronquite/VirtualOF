@@ -1,13 +1,52 @@
-import { ROLE_NAMES, WORKER_ROLES, type Account, type MemberSettings, type RoleKey } from '../shared/types.ts';
+import { randomUUID } from 'node:crypto';
+import {
+  DESK_COUNT,
+  FREE_ACCOUNTS,
+  ROLE_NAMES,
+  WORKER_ROLES,
+  type Account,
+  type AgentView,
+  type MemberSettings,
+  type RoleKey,
+} from '../shared/types.ts';
 import { AgyAgent } from './agents/agy.ts';
 import { ClaudeAgent } from './agents/claude.ts';
 import { CodexAgent } from './agents/codex.ts';
+import { OpencodeAgent } from './agents/opencode.ts';
 import type { Runner } from './agents/runner.ts';
-import { saveTeam, type AgentConfig, type OfficeConfig } from './config.ts';
+import { nameAgents, saveTeam, type AgentConfig, type OfficeConfig } from './config.ts';
 import type { Office } from './office.ts';
 
-/** Accounts with a free tier: Gemini through the Antigravity CLI. */
-const FREE_ACCOUNTS: Account[] = ['antigravity'];
+const ENGINES = { claude: ClaudeAgent, codex: CodexAgent, antigravity: AgyAgent, opencode: OpencodeAgent };
+
+/** Shirt colors handed to new desks, one per desk. */
+const PALETTE = ['#e3a04f', '#4fb3a5', '#d9705a', '#5fbf8f', '#6f8cf0', '#c98bd9'];
+
+/** Codex, agy and opencode read their own config, which they do not report back in full. */
+function toolkitNote(agent: AgentConfig): AgentView['toolkit'] {
+  if (agent.tipo === 'codex') return { skills: [], plugins: [], mcp: [], note: 'Usa a configuração do Codex (~/.codex): servidores MCP e skills de lá.' };
+  if (agent.tipo === 'antigravity') return { skills: [], plugins: [], mcp: [], note: 'Usa a configuração do Antigravity CLI (~/.gemini/antigravity-cli).' };
+  if (agent.tipo === 'opencode') return { skills: [], plugins: [], mcp: [], note: 'Usa a configuração do OpenCode (~/.config/opencode).' };
+  return undefined;
+}
+
+function view(agent: AgentConfig): AgentView {
+  return {
+    id: agent.id,
+    name: agent.apelido || agent.nome,
+    defaultName: agent.nome,
+    model: agent.modelo ?? '',
+    kind: agent.tipo,
+    role: ROLE_NAMES[agent.papel],
+    roleKey: agent.papel,
+    color: agent.cor,
+    status: 'idle',
+    activity: 'Livre',
+    controllable: true,
+    usage: { tasks: 0, inputTokens: 0, outputTokens: 0 },
+    toolkit: toolkitNote(agent),
+  };
+}
 
 export interface Member {
   config: AgentConfig;
@@ -24,34 +63,12 @@ export class Team {
     private readonly config: OfficeConfig,
     private readonly office: Office,
   ) {
-    this.members = config.agentes.map((agent) => {
-      const brief = () => this.brief(agent.id);
-      const Engine = { claude: ClaudeAgent, codex: CodexAgent, antigravity: AgyAgent }[agent.tipo];
-      return { config: agent, runner: new Engine(agent.id, office, brief) };
-    });
-    for (const { config: agent } of this.members) {
-      office.addAgent({
-        id: agent.id,
-        name: agent.apelido || agent.nome,
-        defaultName: agent.nome,
-        model: agent.modelo ?? '',
-        kind: agent.tipo,
-        role: ROLE_NAMES[agent.papel],
-        roleKey: agent.papel,
-        color: agent.cor,
-        status: 'idle',
-        activity: 'Livre',
-        controllable: true,
-        usage: { tasks: 0, inputTokens: 0, outputTokens: 0 },
-        // Codex and agy read their own config, which they do not report back in full.
-        toolkit:
-          agent.tipo === 'codex'
-            ? { skills: [], plugins: [], mcp: [], note: 'Usa a configuração do Codex (~/.codex): servidores MCP e skills de lá.' }
-            : agent.tipo === 'antigravity'
-              ? { skills: [], plugins: [], mcp: [], note: 'Usa a configuração do Antigravity CLI (~/.gemini/antigravity-cli).' }
-              : undefined,
-      });
-    }
+    this.members = config.agentes.map((agent) => ({ config: agent, runner: this.engine(agent) }));
+    for (const { config: agent } of this.members) office.addAgent(view(agent));
+  }
+
+  private engine(agent: AgentConfig): Runner {
+    return new ENGINES[agent.tipo](agent.id, this.office, () => this.brief(agent.id));
   }
 
   get(id: string) {
@@ -142,36 +159,67 @@ export class Team {
     return { key, instructions: instructions + named + english, model: config?.modelo ?? '' };
   }
 
-  /** Applies Configurações: order, roles, nicknames and models. Returns an error message, or null. */
+  /**
+   * Applies Configurações: who sits at each desk (desks can be filled, emptied or given another
+   * AI), roles, nicknames, models and order. Returns an error message, or null.
+   */
   apply(team: MemberSettings[], autoSwitch: boolean): string | null {
     if (this.busy) return 'Espere os agentes terminarem antes de mudar a equipe.';
-    if (team.length !== this.members.length || !team.every((t) => this.get(t.id) && t.role in ROLE_NAMES)) {
-      return 'Equipe inválida.';
+    const valid = (t: MemberSettings) =>
+      (this.get(t.id) || t.id.startsWith('novo')) && t.role in ROLE_NAMES && t.kind in ENGINES && typeof t.nickname === 'string';
+    if (team.length > DESK_COUNT || new Set(team.map((t) => t.id)).size !== team.length || !team.every(valid)) return 'Equipe inválida.';
+    // An empty office is fine; a team that works needs someone to plan and someone to build.
+    if (team.length) {
+      if (team.filter((t) => t.role === 'coordenador').length !== 1) return 'Escolha exatamente um supervisor.';
+      if (!team.some((t) => t.role === 'executor')) return 'Escolha pelo menos um fullstack.';
     }
-    if (team.filter((t) => t.role === 'coordenador').length !== 1) return 'Escolha exatamente um supervisor.';
-    if (!team.some((t) => t.role === 'executor')) return 'Escolha pelo menos um fullstack.';
     const models = this.office.models;
-    for (const t of team) {
-      const kind = this.get(t.id)!.config.tipo;
-      if (t.model && !models[kind].some((m) => m.id === t.model)) return `Modelo desconhecido para ${this.label(this.get(t.id)!)}.`;
-    }
+    if (team.some((t) => t.model && !models[t.kind].some((m) => m.id === t.model))) return 'Modelo desconhecido para um dos agentes.';
 
-    this.members = team.map(({ id, role, nickname, model }) => {
-      const member = this.get(id)!;
-      const apelido = nickname.trim().slice(0, 24);
-      // New role, nickname or model means new instructions: start a fresh conversation.
-      if (member.config.papel !== role || (member.config.apelido ?? '') !== apelido || (member.config.modelo ?? '') !== model) {
+    const keep = new Set(team.map((t) => t.id));
+    for (const gone of this.members.filter((m) => !keep.has(m.config.id))) {
+      gone.runner.stop();
+      this.office.removeAgent(gone.config.id);
+    }
+    const used = new Set(this.members.filter((m) => keep.has(m.config.id)).map((m) => m.config.cor));
+    const added: Member[] = [];
+
+    this.members = team.map(({ id, kind, role, nickname, model }) => {
+      const apelido = nickname.trim().slice(0, 24) || undefined;
+      let member = this.get(id);
+      if (!member) {
+        const cor = PALETTE.find((c) => !used.has(c)) ?? PALETTE[0];
+        used.add(cor);
+        const config: AgentConfig = { id: `${kind}-${randomUUID().slice(0, 8)}`, nome: '', tipo: kind, papel: role, cor, apelido, modelo: model || undefined };
+        member = { config, runner: this.engine(config) };
+        added.push(member);
+        return member;
+      }
+      if (member.config.tipo !== kind) {
+        // Another AI at this desk: a new engine, with nothing carried over from the old one.
+        member.config.tipo = kind;
+        member.runner = this.engine(member.config);
+      } else if (member.config.papel !== role || member.config.apelido !== apelido || (member.config.modelo ?? '') !== model) {
+        // New role, nickname or model means new instructions: start a fresh conversation.
         member.runner.reset();
       }
       member.config.papel = role;
-      member.config.apelido = apelido || undefined;
+      member.config.apelido = apelido;
       member.config.modelo = model || undefined;
-      this.office.update(id, { role: ROLE_NAMES[role], roleKey: role, name: this.label(member), model });
       return member;
     });
+    nameAgents(this.members.map((m) => m.config));
+    for (const { config: agent } of this.members) {
+      if (added.some((m) => m.config === agent)) {
+        this.office.addAgent(view(agent));
+        continue;
+      }
+      const { kind, role, roleKey, name, defaultName, model, toolkit } = view(agent);
+      this.office.update(agent.id, { kind, role, roleKey, name, defaultName, model, toolkit });
+    }
     this.office.setAutoSwitch(autoSwitch);
     saveTeam(
-      this.members.map((m) => ({ id: m.config.id, papel: m.config.papel, apelido: m.config.apelido, modelo: m.config.modelo })),
+      this.members.map(({ config: { nome: _, ...saved } }) => saved),
       autoSwitch,
     );
     this.office.reorder(this.members.map((m) => m.config.id));

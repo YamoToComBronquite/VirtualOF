@@ -9,7 +9,13 @@ export interface AgentConfig {
   tipo: 'claude' | 'codex' | 'antigravity';
   papel: RoleKey;
   cor: string;
+  /** Nickname chosen in Configurações. */
+  apelido?: string;
+  /** Model chosen in Configurações; empty uses the engine's default. */
+  modelo?: string;
 }
+
+type SavedMember = { id: string; papel: RoleKey; apelido?: string; modelo?: string };
 
 export interface OfficeConfig {
   porta: number;
@@ -25,8 +31,8 @@ export interface OfficeConfig {
 interface LocalSettings {
   projeto?: string;
   trocaAutomatica?: boolean;
-  /** Team order and roles, as chosen in Configurações. */
-  equipe?: { id: string; papel: RoleKey }[];
+  /** Team order, roles, nicknames and models, as chosen in Configurações. */
+  equipe?: SavedMember[];
 }
 
 const CONFIG_PATH = fileURLToPath(new URL('../escritorio.config.json', import.meta.url));
@@ -47,10 +53,10 @@ export function loadConfig(): OfficeConfig {
   if (local.trocaAutomatica !== undefined) config.trocaAutomatica = local.trocaAutomatica;
   if (local.equipe) {
     const byId = new Map(config.agentes.map((a) => [a.id, a]));
-    const ordered = local.equipe.flatMap(({ id, papel }) => {
+    const ordered = local.equipe.flatMap(({ id, ...saved }) => {
       const agent = byId.get(id);
       byId.delete(id);
-      return agent ? [{ ...agent, papel }] : [];
+      return agent ? [{ ...agent, ...saved }] : [];
     });
     config.agentes = [...ordered, ...byId.values()]; // agents added to the file later go last
   }
@@ -63,6 +69,6 @@ export function saveProject(project: string) {
   writeLocal({ projeto: project });
 }
 
-export function saveTeam(team: { id: string; papel: RoleKey }[], autoSwitch: boolean) {
+export function saveTeam(team: SavedMember[], autoSwitch: boolean) {
   writeLocal({ equipe: team, trocaAutomatica: autoSwitch });
 }

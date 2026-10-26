@@ -9,6 +9,7 @@ import { WebSocketServer, type WebSocket } from 'ws';
 import type { ClientMessage, ServerMessage } from '../shared/types.ts';
 import { watchAntigravity } from './agents/antigravity.ts';
 import { loadConfig, saveProject } from './config.ts';
+import { loadModels } from './models.ts';
 import { Office } from './office.ts';
 import { Orchestrator } from './orchestrator.ts';
 import { Team } from './team.ts';
@@ -18,6 +19,7 @@ const root = fileURLToPath(new URL('..', import.meta.url));
 const config = loadConfig();
 const office = new Office(config.projeto);
 office.autoSwitch = config.trocaAutomatica ?? true;
+office.models = await loadModels((models) => office.setModels(models));
 const team = new Team(config, office);
 const orchestrator = new Orchestrator(office, team);
 watchAntigravity(config.antigravity, office);
@@ -43,7 +45,7 @@ function handle(msg: ClientMessage) {
       if (office.isLimited(team.account(member))) {
         const cover = team.substitute(member);
         return office.notice(
-          `${member.config.nome} está sem limite de uso agora (veja em Consumo).` + (cover ? ` ${cover.config.nome} está livre para essa tarefa.` : ''),
+          `${team.label(member)} está sem limite de uso agora (veja em Consumo).` + (cover ? ` ${team.label(cover)} está livre para essa tarefa.` : ''),
         );
       }
       if (orchestrator.running) return office.notice('Tem um comando geral em andamento. Pare o plano para falar direto com um agente.');

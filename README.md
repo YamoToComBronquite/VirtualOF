@@ -9,7 +9,7 @@ A pixel-art virtual office for your AI coding agents. Hand out tasks, approve wh
 ## What it does
 
 - **One general command, a whole team.** Write what you want once. The coordinator plans the steps in the best order, the office hands each step to the right agent, and after every step the coordinator can rework the rest of the plan (for example, to fix what the reviewer found). The plan shows up as a live checklist.
-- **Pick who does what.** In **Configurações**, choose each agent's role (coordinator, executor, reviewer or off duty) and the desk order. Any agent can coordinate, Codex included.
+- **Pick who does what.** In **Configurações**, choose each agent's role (coordinator, executor, reviewer or off duty), give it a nickname, pick its model (Claude: Opus, Sonnet or Haiku; Codex: the models in your Codex setup; Gemini: whatever `agy models` lists for your Google account) and set the desk order. Open it straight from http://localhost:4321/#configuracoes. Any agent can coordinate, Codex included.
 - **Usage at a glance.** The **Consumo** panel shows each account's subscription limit (Claude reports how much of the 5-hour or weekly window you used and when it resets; Codex reports when it hits the limit) and what each agent spent: tasks, tokens and the API-equivalent cost.
 - **Automatic switch on limits.** When an account hits its limit in the middle of a general command, an agent on another account takes over that step, or the coordination itself, and the plan keeps going.
 - **Your skills and plugins come along.** Claude agents load the same skills, plugins, MCP servers and CLAUDE.md as your Claude Code; Codex uses its own `~/.codex` setup. Each desk lists what its agent loaded.

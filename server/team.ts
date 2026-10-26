@@ -1,4 +1,4 @@
-import { ROLE_NAMES, type Account, type RoleKey } from '../shared/types.ts';
+import { ROLE_NAMES, type Account, type MemberSettings, type RoleKey } from '../shared/types.ts';
 import { AgyAgent } from './agents/agy.ts';
 import { ClaudeAgent } from './agents/claude.ts';
 import { CodexAgent } from './agents/codex.ts';
@@ -29,7 +29,9 @@ export class Team {
     for (const { config: agent } of this.members) {
       office.addAgent({
         id: agent.id,
-        name: agent.nome,
+        name: agent.apelido || agent.nome,
+        defaultName: agent.nome,
+        model: agent.modelo ?? '',
         kind: agent.tipo,
         role: ROLE_NAMES[agent.papel],
         roleKey: agent.papel,
@@ -70,6 +72,11 @@ export class Team {
     return this.members.some((m) => m.runner.busy);
   }
 
+  /** The name the user knows the agent by: its nickname, if it has one. */
+  label(member: Member) {
+    return member.config.apelido || member.config.nome;
+  }
+
   /** Whose subscription an agent bills to; agents on the same account hit limits together. */
   account(member: Member): Account {
     return member.config.tipo;
@@ -99,32 +106,43 @@ export class Team {
   }
 
   private brief(id: string) {
-    const key = this.overrides.get(id) ?? this.get(id)?.config.papel ?? 'folga';
+    const config = this.get(id)?.config;
+    const key = this.overrides.get(id) ?? config?.papel ?? 'folga';
     const instructions = key === 'folga' ? '' : this.config.papeis[key].instrucoes;
-    return { key, instructions };
+    const named = config?.apelido ? `\n\nNeste escritório, o usuário te chama de "${config.apelido}".` : '';
+    return { key, instructions: instructions + named, model: config?.modelo ?? '' };
   }
 
-  /** Applies the order and roles from Configurações. Returns an error message, or null. */
-  apply(team: { id: string; role: RoleKey }[], autoSwitch: boolean): string | null {
+  /** Applies Configurações: order, roles, nicknames and models. Returns an error message, or null. */
+  apply(team: MemberSettings[], autoSwitch: boolean): string | null {
     if (this.busy) return 'Espere os agentes terminarem antes de mudar a equipe.';
     if (team.length !== this.members.length || !team.every((t) => this.get(t.id) && t.role in ROLE_NAMES)) {
       return 'Equipe inválida.';
     }
     if (team.filter((t) => t.role === 'coordenador').length !== 1) return 'Escolha exatamente um coordenador.';
     if (!team.some((t) => t.role === 'executor')) return 'Escolha pelo menos um executor.';
+    const models = this.office.models;
+    for (const t of team) {
+      const kind = this.get(t.id)!.config.tipo;
+      if (t.model && !models[kind].some((m) => m.id === t.model)) return `Modelo desconhecido para ${this.label(this.get(t.id)!)}.`;
+    }
 
-    this.members = team.map(({ id, role }) => {
+    this.members = team.map(({ id, role, nickname, model }) => {
       const member = this.get(id)!;
-      if (member.config.papel !== role) {
-        member.config.papel = role;
-        member.runner.reset(); // new role, new instructions: start a fresh conversation
-        this.office.update(id, { role: ROLE_NAMES[role], roleKey: role });
+      const apelido = nickname.trim().slice(0, 24);
+      // New role, nickname or model means new instructions: start a fresh conversation.
+      if (member.config.papel !== role || (member.config.apelido ?? '') !== apelido || (member.config.modelo ?? '') !== model) {
+        member.runner.reset();
       }
+      member.config.papel = role;
+      member.config.apelido = apelido || undefined;
+      member.config.modelo = model || undefined;
+      this.office.update(id, { role: ROLE_NAMES[role], roleKey: role, name: this.label(member), model });
       return member;
     });
     this.office.setAutoSwitch(autoSwitch);
     saveTeam(
-      this.members.map((m) => ({ id: m.config.id, papel: m.config.papel })),
+      this.members.map((m) => ({ id: m.config.id, papel: m.config.papel, apelido: m.config.apelido, modelo: m.config.modelo })),
       autoSwitch,
     );
     this.office.reorder(this.members.map((m) => m.config.id));

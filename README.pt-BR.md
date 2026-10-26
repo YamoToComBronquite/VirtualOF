@@ -9,7 +9,7 @@ Um escritório virtual em pixel art para os seus agentes de IA. Você passa tare
 ## O que ele faz
 
 - **Um comando geral, a equipe inteira.** Você escreve o que quer uma vez. O coordenador monta os passos na melhor ordem, o escritório passa cada passo para o agente certo, e depois de cada passo o coordenador pode refazer o resto do plano (por exemplo, para corrigir o que o revisor apontou). O plano aparece como uma lista ao vivo.
-- **Você escolhe quem faz o quê.** Em **Configurações**, defina o papel de cada agente (coordenador, executor, revisor ou de folga) e a ordem das mesas. Qualquer um pode coordenar, inclusive o Codex.
+- **Você escolhe quem faz o quê.** Em **Configurações**, defina o papel de cada agente (coordenador, executor, revisor ou de folga), dê um apelido, escolha o modelo (Claude: Opus, Sonnet ou Haiku; Codex: os modelos da sua configuração; Gemini: o que `agy models` lista para a sua conta do Google) e a ordem das mesas. Dá para abrir direto em http://localhost:4321/#configuracoes. Qualquer um pode coordenar, inclusive o Codex.
 - **Consumo à vista.** O painel **Consumo** mostra o limite da assinatura de cada conta (o Claude informa quanto da janela de 5 horas ou semanal você usou e quando renova; o Codex avisa quando bate o limite) e o gasto de cada agente: tarefas, tokens e quanto custaria pela API.
 - **Troca automática no limite.** Se uma conta bater o limite no meio de um comando geral, um agente de outra conta assume aquele passo, ou a própria coordenação, e o plano continua.
 - **Suas skills e plugins vão junto.** Os agentes Claude carregam as mesmas skills, plugins, servidores MCP e CLAUDE.md do seu Claude Code; o Codex usa a configuração dele em `~/.codex`. Cada mesa mostra o que o agente carregou.

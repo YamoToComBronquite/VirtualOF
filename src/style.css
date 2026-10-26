@@ -454,7 +454,8 @@ button.ghost {
 
 .member {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  /* A fixed column for the selects keeps every row lined up */
+  grid-template-columns: auto minmax(0, 1fr) 190px auto;
   align-items: center;
   gap: 12px;
   padding: 8px;
@@ -466,6 +467,21 @@ button.ghost {
   display: grid;
   gap: 2px;
   min-width: 0;
+}
+
+.member__nickname {
+  padding: 5px 8px;
+  font: 13px var(--pixel);
+}
+
+.member__choices {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.member__choices select {
+  width: 100%;
 }
 
 .member__warn {
@@ -952,6 +968,18 @@ select {
   padding: 10px 12px;
   background: var(--plum-raised);
   border-left: 3px solid var(--lamp);
+}
+
+@media (max-width: 560px) {
+  .member {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .member__choices,
+  .member__order {
+    grid-column: 2;
+  }
+
 }
 
 @media (max-width: 860px) {

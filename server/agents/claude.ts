@@ -45,6 +45,7 @@ export class ClaudeAgent implements Runner {
     // A session belongs to one folder; switching projects starts a fresh conversation.
     if (this.sessionCwd !== cwd) this.reset();
     this.sessionCwd = cwd;
+    const brief = this.brief();
     this.abort = new AbortController();
     this.outcome = { ok: false, text: '' };
     this.office.write(id, 'task', prompt);
@@ -61,7 +62,9 @@ export class ClaudeAgent implements Runner {
           // servers, and every skill they installed.
           settingSources: ['user', 'project', 'local'],
           skills: 'all',
-          systemPrompt: { type: 'preset', preset: 'claude_code', append: `${this.brief().instructions}\n\n${TERMINAL_RULE}` },
+          systemPrompt: { type: 'preset', preset: 'claude_code', append: `${brief.instructions}\n\n${TERMINAL_RULE}` },
+          // Empty means whatever the user's Claude Code is set to.
+          model: brief.model || undefined,
           canUseTool: async (tool, input, { signal }) => {
             this.office.setStatus(id, 'waiting', `Esperando você aprovar: ${tool}`);
             const allow = await this.office.askPermission(id, tool, describeTool(tool, input), signal);

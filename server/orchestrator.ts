@@ -120,7 +120,7 @@ export class Orchestrator {
 
       const remaining = this.plan.steps.filter((s) => s.status === 'pending');
       const review = await this.ask(
-        `Passo ${position} (${member.config.nome}) ${outcome.ok ? 'terminou' : 'falhou'}. Resultado:\n${clip(outcome.text || '(sem resposta)')}\n\n` +
+        `Passo ${position} (${this.team.label(member)}) ${outcome.ok ? 'terminou' : 'falhou'}. Resultado:\n${clip(outcome.text || '(sem resposta)')}\n\n` +
           (remaining.length
             ? `Próximos passos: ${remaining.map((s) => `${s.agentId}: ${s.task}`).join(' | ')}.\n`
             : 'Não há mais passos no plano.\n') +
@@ -166,11 +166,11 @@ export class Orchestrator {
   /** Catches up a stand-in coordinator, who did not see the conversation so far. */
   private briefing(previous: Member) {
     const steps = this.plan?.steps.map((s, i) => `${i + 1}. ${s.agentId} (${s.status}): ${s.task}`).join('\n') || 'nenhum ainda';
-    return `Você assumiu a coordenação porque ${previous.config.nome} bateu o limite de uso. Comando geral do usuário: "${this.plan?.command}".\nPlano até agora:\n${steps}`;
+    return `Você assumiu a coordenação porque ${this.team.label(previous)} bateu o limite de uso. Comando geral do usuário: "${this.plan?.command}".\nPlano até agora:\n${steps}`;
   }
 
   private handover(from: Member, to: Member, what: string) {
-    const text = `${from.config.nome} bateu o limite de uso. ${to.config.nome} assumiu ${what}.`;
+    const text = `${this.team.label(from)} bateu o limite de uso. ${this.team.label(to)} assumiu ${what}.`;
     this.office.write(to.config.id, 'permission', text);
     this.office.notice(text);
   }
@@ -188,7 +188,7 @@ export class Orchestrator {
     const roster = workers
       .map((w) => {
         const can = w.config.papel === 'executor' ? 'edita arquivos e roda comandos' : 'só lê e aponta problemas, não edita';
-        return `- id "${w.config.id}": ${w.config.nome}, ${w.config.papel} (${can})`;
+        return `- id "${w.config.id}": ${this.team.label(w)}, ${w.config.papel} (${can})`;
       })
       .join('\n');
     return [

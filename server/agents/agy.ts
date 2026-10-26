@@ -11,7 +11,7 @@ const INSTALL_COMMAND = 'irm https://antigravity.google/cli/install.ps1 | iex';
 const LIMIT = /quota|rate.?limit|resource.?exhausted|\b429\b|usage limit|exhausted/i;
 
 /** Where the official installer puts agy on Windows; elsewhere we rely on PATH. */
-function agyPath() {
+export function agyPath() {
   const local = process.env.LOCALAPPDATA ? join(process.env.LOCALAPPDATA, 'agy', 'bin', 'agy.exe') : '';
   return local && existsSync(local) ? local : 'agy';
 }
@@ -94,9 +94,11 @@ export class AgyAgent implements Runner {
   run(prompt: string, cwd: string, note?: string): Promise<RunOutcome> {
     const { id } = this;
     const role = this.brief();
-    if (this.conversationCwd !== cwd || this.conversationRole !== role.key) this.reset();
+    // A new role or model starts a fresh conversation, like a new folder does.
+    const setup = `${role.key}|${role.model}`;
+    if (this.conversationCwd !== cwd || this.conversationRole !== setup) this.reset();
     this.conversationCwd = cwd;
-    this.conversationRole = role.key;
+    this.conversationRole = setup;
 
     let input = note ? `${prompt}\n\n${note}` : prompt;
     // agy has no system prompt flag, so the role goes in front of the first message.
@@ -108,6 +110,7 @@ export class AgyAgent implements Runner {
     this.office.setStatus(id, 'thinking', 'Lendo a tarefa');
 
     const args = ['-p', input, '--output-format', 'stream-json'];
+    if (role.model) args.push('--model', role.model);
     if (this.conversationId) args.push('--conversation', this.conversationId);
 
     return new Promise((resolve) => {
@@ -150,7 +153,7 @@ export class AgyAgent implements Runner {
         if (event.conversation_id) this.conversationId = event.conversation_id;
         if (event.event === 'init') {
           this.office.update(id, {
-            toolkit: { skills: [], plugins: [], mcp: [], note: `Modelo: ${event.model ?? 'padrão do Antigravity'}. Ferramentas: ${(event.tools ?? []).length}.` },
+            toolkit: { skills: [], plugins: [], mcp: [], note: `Ferramentas do Antigravity CLI: ${(event.tools ?? []).length}.` },
           });
         } else if (event.event === 'step_update') {
           if (event.step_type === 'tool' && event.state === 'ACTIVE') {

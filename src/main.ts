@@ -1,6 +1,7 @@
 import {
   ROLE_NAMES,
   type Account,
+  type ModelCatalog,
   type Quota,
   type AgentStatus,
   type AgentView,
@@ -46,6 +47,7 @@ const state = {
   plan: null as Plan | null,
   quota: { claude: { status: 'unknown' }, codex: { status: 'unknown' }, antigravity: { status: 'unknown' } } as Record<Account, Quota>,
   autoSwitch: true,
+  models: { claude: [], codex: [], antigravity: [] } as ModelCatalog,
   project: '',
   selectedId: undefined as string | undefined,
 };
@@ -112,12 +114,15 @@ function receive(msg: ServerMessage) {
       state.plan = msg.plan;
       state.quota = msg.quota;
       state.autoSwitch = msg.autoSwitch;
+      state.models = msg.models;
       state.project = msg.project;
       if (!state.selectedId || !agentById(state.selectedId)) state.selectedId = msg.agents[0]?.id;
       scene.doneCount = msg.log.filter((e) => e.kind === 'result').length;
       $<HTMLInputElement>('project').value = msg.project;
       renderAll();
       redraw();
+      // localhost:4321/#configuracoes opens straight into the team settings
+      if (location.hash === '#configuracoes' && !$<HTMLDialogElement>('settings').open) openSettings();
       break;
     case 'agent': {
       const index = state.agents.findIndex((a) => a.id === msg.agent.id);
@@ -176,6 +181,11 @@ function receive(msg: ServerMessage) {
       state.quota = msg.quota;
       renderUsage();
       renderTeam();
+      renderDesk();
+      break;
+    case 'models':
+      state.models = msg.models;
+      if ($<HTMLDialogElement>('settings').open) renderSettings();
       renderDesk();
       break;
     case 'auto-switch':
@@ -445,13 +455,16 @@ function renderToolkit(agent: AgentView) {
   const list = $('desk-toolkit');
   list.hidden = !agent.controllable;
   if (!agent.controllable) return;
+  const models = state.models[agent.kind] ?? [];
+  const modelLabel = models.find((m) => m.id === (agent.model ?? ''))?.label ?? agent.model ?? 'padrão';
+  const model = [el('dt', undefined, 'Modelo'), el('dd', undefined, modelLabel)];
   const kit = agent.toolkit;
   if (!kit) {
-    list.replaceChildren(el('dd', 'hint', 'As skills, plugins e servidores MCP aparecem aqui depois da primeira tarefa.'));
+    list.replaceChildren(...model, el('dd', 'hint', 'As skills, plugins e servidores MCP aparecem aqui depois da primeira tarefa.'));
     return;
   }
   if (kit.note) {
-    list.replaceChildren(el('dd', 'hint', kit.note));
+    list.replaceChildren(...model, el('dd', 'hint', kit.note));
     return;
   }
   const rows: [string, string[]][] = [
@@ -460,6 +473,7 @@ function renderToolkit(agent: AgentView) {
     ['MCP', kit.mcp],
   ];
   list.replaceChildren(
+    ...model,
     ...rows.flatMap(([label, items]) => [el('dt', undefined, label), el('dd', undefined, items.length ? items.join(', ') : 'nenhum')]),
   );
 }
@@ -615,12 +629,19 @@ function toast(text: string) {
   toastTimer = window.setTimeout(() => (box.hidden = true), 5000);
 }
 
-/* ---------- Settings: roles and desk order ---------- */
+/* ---------- Settings: roles, nicknames, models and desk order ---------- */
 
-let draft: { agent: AgentView; role: RoleKey }[] = [];
+let draft: { agent: AgentView; role: RoleKey; nickname: string; model: string }[] = [];
 
 function openSettings() {
-  draft = state.agents.filter((a) => a.controllable && a.roleKey).map((agent) => ({ agent, role: agent.roleKey! }));
+  draft = state.agents
+    .filter((a) => a.controllable && a.roleKey)
+    .map((agent) => ({
+      agent,
+      role: agent.roleKey!,
+      nickname: agent.name === agent.defaultName ? '' : agent.name,
+      model: agent.model ?? '',
+    }));
   $<HTMLInputElement>('auto-switch').checked = state.autoSwitch;
   renderSettings();
   $<HTMLDialogElement>('settings').showModal();
@@ -642,7 +663,14 @@ function renderSettings() {
       frame.append(portrait(entry.agent));
 
       const info = el('span', 'member__info');
-      info.append(el('span', 'card__name', entry.agent.name), el('span', 'card__role', ENGINE_NAMES[entry.agent.kind]));
+      // Typing a nickname only updates the draft; re-rendering here would steal the focus.
+      const nickname = el('input', 'member__nickname');
+      nickname.value = entry.nickname;
+      nickname.placeholder = entry.agent.defaultName;
+      nickname.maxLength = 24;
+      nickname.setAttribute('aria-label', `Apelido de ${entry.agent.defaultName}`);
+      nickname.addEventListener('input', () => (entry.nickname = nickname.value));
+      info.append(nickname, el('span', 'card__role', `${entry.agent.defaultName} · ${ENGINE_NAMES[entry.agent.kind]}`));
       if (entry.agent.kind === 'codex' && entry.role === 'executor') {
         info.append(el('span', 'member__warn', 'Como executor, o Codex edita arquivos sem post-it de permissão.'));
       }
@@ -665,6 +693,22 @@ function renderSettings() {
         renderSettings();
       });
 
+      const model = el('select');
+      model.setAttribute('aria-label', `Modelo de ${entry.agent.defaultName}`);
+      const options = state.models[entry.agent.kind] ?? [];
+      // Keep a saved model visible even if the list hasn't loaded it (yet).
+      const known = options.some((m) => m.id === entry.model);
+      for (const option of known ? options : [...options, { id: entry.model, label: entry.model }]) {
+        const node = el('option', undefined, option.label);
+        node.value = option.id;
+        node.selected = option.id === entry.model;
+        model.append(node);
+      }
+      model.addEventListener('change', () => (entry.model = model.value));
+
+      const choices = el('span', 'member__choices');
+      choices.append(select, model);
+
       const move = (delta: number) => {
         const target = index + delta;
         [draft[index], draft[target]] = [draft[target], draft[index]];
@@ -683,7 +727,7 @@ function renderSettings() {
       const order = el('span', 'member__order');
       order.append(up, down);
 
-      li.append(frame, info, select, order);
+      li.append(frame, info, choices, order);
       return li;
     }),
   );
@@ -700,7 +744,7 @@ $('settings').addEventListener('close', () => {
   if (dialog.returnValue === 'save' && !draftProblem()) {
     send({
       type: 'team',
-      team: draft.map((d) => ({ id: d.agent.id, role: d.role })),
+      team: draft.map((d) => ({ id: d.agent.id, role: d.role, nickname: d.nickname, model: d.model })),
       autoSwitch: $<HTMLInputElement>('auto-switch').checked,
     });
   }

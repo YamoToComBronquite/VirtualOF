@@ -32,6 +32,7 @@ export class CodexAgent implements Runner {
   private thread?: Thread;
   private threadCwd?: string;
   private threadRole?: string;
+  private threadModel?: string;
   private abort?: AbortController;
   private outcome: RunOutcome = { ok: false, text: '' };
 
@@ -53,13 +54,16 @@ export class CodexAgent implements Runner {
     const { id } = this;
     let input = note ? `${prompt}\n\n${note}` : prompt;
     const role = this.brief();
-    // The sandbox is fixed per thread, so a role change (even a temporary one) needs a new thread.
-    if (!this.thread || this.threadCwd !== cwd || this.threadRole !== role.key) {
+    // Sandbox and model are fixed per thread, so changing either (even for one covered step)
+    // needs a new thread.
+    if (!this.thread || this.threadCwd !== cwd || this.threadRole !== role.key || this.threadModel !== role.model) {
       this.threadRole = role.key;
+      this.threadModel = role.model;
       this.thread = this.codex.startThread({
         workingDirectory: cwd,
         skipGitRepoCheck: true,
         sandboxMode: role.key === 'executor' ? 'workspace-write' : 'read-only',
+        model: role.model || undefined,
         approvalPolicy: 'never',
       });
       this.threadCwd = cwd;

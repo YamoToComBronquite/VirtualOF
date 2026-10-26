@@ -18,7 +18,8 @@ A pixel-art virtual office for your AI coding agents. Hand out tasks, approve wh
 - **Or talk to one agent directly.** Click a desk, type a task, send it. No terminal needed.
 - **Claude and Codex, side by side.** Two Claude agents run through the [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk); Codex runs through the [Codex SDK](https://github.com/openai/codex/tree/main/sdk/typescript), read-only unless it is an executor. Gemini runs through the [Antigravity CLI](https://antigravity.google/docs/cli/headless/) (`agy`) in headless mode and starts as a reserve, ready to cover when another account hits its limit.
 - **Approvals as sticky notes.** When Claude wants to edit a file or run a command, a note pops up with **Aprovar** (approve) and **Negar** (deny).
-- **"Open the terminal" cards.** If an agent needs something only you can do (a login, an install, an interactive command), it stops and the office shows the exact command to copy. Click **Já rodei** ("I ran it") and the agent carries on.
+- **Built-in PowerShell.** A real terminal docked under the office (button **PowerShell** or Ctrl + '), opened in the project folder.
+- **"Needs the terminal" cards.** If an agent needs something only you can do (a login, an install, an interactive command), it stops and the office shows the exact command. Click **Rodar no PowerShell** to run it in the built-in terminal, then **Já rodei** ("I ran it") and the agent carries on.
 - **Watches Antigravity.** Antigravity conversations show up as characters that light up while they work. This is watch-only: tasks for Antigravity still go through Antigravity.
 - **Live status at every desk.** The screen, the speech bubble and the desk lamp show whether each agent is thinking, reading, writing, running a command, waiting for you, done or stuck. Desktop notifications fire when the tab is in the background.
 
@@ -56,8 +57,8 @@ To ship a new version: bump `version` in `package.json` and run `npm run release
 Everyone uses their own subscriptions, and the agents count against their usual limits:
 
 - **Claude:** an account signed in to Claude Code on this machine (the CLI or the IDE extension), or an `ANTHROPIC_API_KEY`.
-- **Codex:** a ChatGPT account. If it isn't signed in, the office shows the command on an **Abra o terminal** card.
-- **Gemini:** the [Antigravity CLI](https://antigravity.google/docs/getting-started) (`agy`), signed in with your Google account (run `agy` once in a terminal; it has its own login, separate from the IDE). If it is missing, the office shows the install command.
+- **Codex:** a ChatGPT account. If it isn't signed in, the office shows the command on a **Precisa do terminal** card, ready to run in the built-in PowerShell.
+- **Gemini:** the [Antigravity CLI](https://antigravity.google/docs/getting-started) (`agy`), signed in with your Google account (run `agy` once in the built-in PowerShell; it has its own login, separate from the IDE). If it is missing, the office shows the install command.
 - **Optional:** [Antigravity](https://antigravity.google), to see its IDE conversations in the office.
 
 Several agents working at once use those limits up faster.

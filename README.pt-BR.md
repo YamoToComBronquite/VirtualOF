@@ -18,7 +18,8 @@ Um escritório virtual em pixel art para os seus agentes de IA. Você passa tare
 - **Ou fale direto com um agente.** Clique numa mesa, escreva a tarefa e mande. Sem terminal.
 - **Claude e Codex juntos.** Dois agentes Claude rodam pelo [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk); o Codex roda pelo [Codex SDK](https://github.com/openai/codex/tree/main/sdk/typescript), só leitura a não ser que seja executor. O Gemini roda pelo [Antigravity CLI](https://antigravity.google/docs/cli/headless/) (`agy`) em modo headless e começa como reserva, pronto para cobrir quando outra conta bater o limite.
 - **Permissões viram post-its.** Quando o Claude quer editar um arquivo ou rodar um comando, aparece um post-it com **Aprovar** e **Negar**.
-- **Cartão "Abra o terminal".** Se um agente precisar de algo que só você pode fazer (login, instalação, comando interativo), ele para e o escritório mostra o comando exato para copiar. Clique em **Já rodei** e ele continua.
+- **PowerShell embutido.** Um terminal de verdade embaixo do escritório (botão **PowerShell** ou Ctrl + '), aberto na pasta do projeto.
+- **Cartão "Precisa do terminal".** Se um agente precisar de algo que só você pode fazer (login, instalação, comando interativo), ele para e o escritório mostra o comando exato. Clique em **Rodar no PowerShell** para rodar no terminal embutido, depois em **Já rodei**, e ele continua.
 - **Acompanha o Antigravity.** As conversas do Antigravity aparecem como personagens que se acendem quando estão trabalhando. É só acompanhamento: tarefas para o Antigravity continuam pelo próprio Antigravity.
 - **Status ao vivo em cada mesa.** A tela, o balão e a luminária mostram se o agente está pensando, lendo, escrevendo, rodando comando, esperando você, terminou ou deu erro. Com a aba em segundo plano, chegam notificações do sistema.
 
@@ -54,8 +55,8 @@ Para lançar uma versão nova: aumente a `version` no `package.json` e rode `npm
 Cada pessoa usa as próprias assinaturas, e os agentes gastam os limites de sempre:
 
 - **Claude:** uma conta logada no Claude Code neste computador (CLI ou extensão da IDE), ou uma `ANTHROPIC_API_KEY`.
-- **Codex:** uma conta do ChatGPT. Se faltar o login, o escritório mostra o comando no cartão **Abra o terminal**.
-- **Gemini:** o [Antigravity CLI](https://antigravity.google/docs/getting-started) (`agy`), logado com sua conta do Google (rode `agy` uma vez num terminal; o login é separado do IDE). Se faltar, o escritório mostra o comando de instalação.
+- **Codex:** uma conta do ChatGPT. Se faltar o login, o escritório mostra o comando no cartão **Precisa do terminal**, pronto para rodar no PowerShell embutido.
+- **Gemini:** o [Antigravity CLI](https://antigravity.google/docs/getting-started) (`agy`), logado com sua conta do Google (rode `agy` uma vez no PowerShell embutido; o login é separado do IDE). Se faltar, o escritório mostra o comando de instalação.
 - **Opcional:** o [Antigravity](https://antigravity.google), para ver as conversas do IDE no escritório.
 
 Vários agentes trabalhando ao mesmo tempo gastam esses limites mais rápido.

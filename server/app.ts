@@ -10,6 +10,7 @@ import { loadConfig, saveProject } from './config.ts';
 import { loadModels } from './models.ts';
 import { Office } from './office.ts';
 import { Orchestrator } from './orchestrator.ts';
+import { Shell } from './shell.ts';
 import { importSkill, listSkills, SKILL_DIRS } from './skills.ts';
 import { Team } from './team.ts';
 
@@ -70,6 +71,7 @@ export async function startOffice(options: OfficeOptions) {
   const orchestrator = new Orchestrator(office, team);
   const stopWatching = watchAntigravity(config.antigravity, office);
   mkdirSync(LOBBY, { recursive: true });
+  const shell = new Shell((msg) => office.publish(msg), () => office.project);
 
   function handle(msg: ClientMessage) {
     switch (msg.type) {
@@ -129,6 +131,18 @@ export async function startOffice(options: OfficeOptions) {
       case 'terminal-done':
         office.clearTerminal(msg.id);
         return;
+      case 'shell-input':
+        if (typeof msg.data === 'string') shell.input(msg.data);
+        return;
+      case 'shell-run':
+        if (typeof msg.command === 'string' && msg.command.trim()) shell.run(msg.command.trim());
+        return;
+      case 'shell-resize':
+        shell.resize(msg.cols, msg.rows);
+        return;
+      case 'shell-restart':
+        shell.restart();
+        return;
       case 'project': {
         const path = resolve(msg.path.trim());
         if (!isFolder(path)) return office.notice(`Essa pasta não existe: ${msg.path}`);
@@ -165,6 +179,10 @@ export async function startOffice(options: OfficeOptions) {
   wss.on('connection', (ws: WebSocket) => {
     const send = (msg: ServerMessage) => ws.send(JSON.stringify(msg));
     send(office.snapshot());
+    if (shell.running) {
+      send({ type: 'shell-state', running: true, cwd: shell.cwd });
+      send({ type: 'shell-output', data: shell.history() });
+    }
     const unsubscribe = office.subscribe(send);
     ws.on('message', (data) => {
       try {
@@ -187,6 +205,7 @@ export async function startOffice(options: OfficeOptions) {
       orchestrator.stop();
       for (const member of team.list()) member.runner.stop();
       stopWatching();
+      shell.close();
       wss.close();
       server.close();
     },

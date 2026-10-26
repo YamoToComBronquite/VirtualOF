@@ -155,7 +155,9 @@ export type ServerMessage =
   | { type: 'project'; project: string }
   | { type: 'notice'; text: string }
   | { type: 'terminal'; alert: TerminalAlert }
-  | { type: 'terminal-cleared'; id: string };
+  | { type: 'terminal-cleared'; id: string }
+  | { type: 'shell-output'; data: string }
+  | { type: 'shell-state'; running: boolean; cwd: string };
 
 /** Something only the user can do in a terminal (a login, an install, an interactive command). */
 export interface TerminalAlert {
@@ -170,6 +172,10 @@ export type ClientMessage =
   | { type: 'stop'; agentId: string }
   | { type: 'permission'; id: string; allow: boolean }
   | { type: 'terminal-done'; id: string }
+  | { type: 'shell-input'; data: string }
+  | { type: 'shell-run'; command: string }
+  | { type: 'shell-resize'; cols: number; rows: number }
+  | { type: 'shell-restart' }
   | { type: 'command'; prompt: string }
   | { type: 'team'; team: MemberSettings[]; autoSwitch: boolean }
   | { type: 'list-skills' }

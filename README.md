@@ -8,22 +8,23 @@ A pixel-art virtual office for your AI coding agents. Hand out tasks, approve wh
 
 ## What it does
 
-- **One general command, a whole team.** Write what you want once. The coordinator plans the steps in the best order, the office hands each step to the right agent, and after every step the coordinator can rework the rest of the plan (for example, to fix what the reviewer found). The plan shows up as a live checklist.
-- **Pick who does what.** In **Configurações**, choose each agent's role (coordinator, executor, reviewer or off duty), give it a nickname, pick its model (Claude: Opus, Sonnet or Haiku; Codex: the models in your Codex setup; Gemini: whatever `agy models` lists for your Google account) and set the desk order. Open it straight from http://localhost:4321/#configuracoes. Any agent can coordinate, Codex included.
-- **Usage at a glance.** The **Consumo** panel shows each account's subscription limit (Claude reports how much of the 5-hour or weekly window you used and when it resets; Codex reports when it hits the limit) and what each agent spent: tasks, tokens and the API-equivalent cost.
-- **Automatic switch on limits.** When an account hits its limit in the middle of a general command, an agent on another account takes over that step, or the coordination itself, and the plan keeps going.
-- **Your skills and plugins come along.** Claude agents load the same skills, plugins, MCP servers and CLAUDE.md as your Claude Code; Codex uses its own `~/.codex` setup. Each desk lists what its agent loaded.
-- **Import skills.** The **Skills** window lists the skills each tool has and installs a new one from its folder (or just its SKILL.md) for Claude, Codex and/or Gemini, after showing what it says. Only import skills you trust: they can include scripts the agents run.
-- **Make the room yours.** The **Ambiente** window sets the time of day (night, sunset, day), wall color and floor, hides or shows the cat, rug, plants and the coffee corner and server rack, and can put your own picture in the window, drawn as pixel art.
-- **Or talk to one agent directly.** Click a desk, type a task, send it. No terminal needed.
-- **Claude and Codex, side by side.** Two Claude agents run through the [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk); Codex runs through the [Codex SDK](https://github.com/openai/codex/tree/main/sdk/typescript), read-only unless it is an executor. Gemini runs through the [Antigravity CLI](https://antigravity.google/docs/cli/headless/) (`agy`) in headless mode and starts as a reserve, ready to cover when another account hits its limit.
-- **Approvals as sticky notes.** When Claude wants to edit a file or run a command, a note pops up with **Aprovar** (approve) and **Negar** (deny).
-- **Built-in PowerShell.** A real terminal docked under the office (button **PowerShell** or Ctrl + '), opened in the project folder.
+- **A team with real jobs.** Six desks, one job each: a **supervisor** who plans, a **UI/UX designer**, two **fullstack** developers, a **tester** and a **reviewer**. The default team spreads them over three accounts (Claude, ChatGPT and Google) so one limit doesn't stop everyone. In **Ajustes** (settings) you change each agent's job, nickname and model (Claude: Opus, Sonnet or Haiku; Codex: the models in your Codex setup; Gemini: whatever `agy models` lists), and the desk order.
+- **A chat, like any AI app.** The right-hand panel is a conversation: your messages, the agents' replies and what they are doing scroll up, and the message box stays at the bottom. **Enter** sends, **Shift + Enter** adds a line. While something runs, the send button turns into a stop button.
+- **Talk to the team or to one agent.** Under **Para** (to), pick **Equipe** (team) for a general command, or pick one agent from the list. Clicking a desk picks that agent too, and the conversation then shows only that agent.
+- **One general command, a whole team.** The supervisor plans the steps in the best order, the office hands each step to the right agent, and after every step the supervisor can rework the rest of the plan (for example, to fix what the reviewer found). The plan sits above the message box as a live checklist.
+- **The team at a glance.** A drawer on the left (open or close it from its tab) shows every agent with their job, what they are doing and a **stress** meter: how close their account is to its limit. Below it, **Consumo** (usage) lists tasks, how much of the limit is used and how much is left.
+- **Automatic switch on limits, with a handover note.** When an account hits its limit mid-task, an agent on another account takes over, free accounts (Gemini) first. The new agent gets the original task, what the previous one already did and where it stopped, so it carries on instead of starting over. This works for general commands and for direct chats.
+- **Skills for everyone.** The **Skills** window lists your skills once for the whole team. Importing one installs it for Claude, Codex and Gemini, so every agent, including ones added later, gets it. **Passar para todos** (share with everyone) copies skills that only some agents have. Only import skills you trust: they can include scripts the agents run.
+- **Your setup comes along.** Claude agents load the same skills, plugins, MCP servers and CLAUDE.md as your Claude Code; Codex uses its own `~/.codex` setup. Each agent's details list what it loaded.
+- **Built-in PowerShell.** A real terminal along the bottom of the window (button **Terminal** or Ctrl + '), opened in the project folder.
 - **"Needs the terminal" cards.** If an agent needs something only you can do (a login, an install, an interactive command), it stops and the office shows the exact command. Click **Rodar no PowerShell** to run it in the built-in terminal, then **Já rodei** ("I ran it") and the agent carries on.
-- **Watches Antigravity.** Antigravity conversations show up as characters that light up while they work. This is watch-only: tasks for Antigravity still go through Antigravity.
-- **Live status at every desk.** The screen, the speech bubble and the desk lamp show whether each agent is thinking, reading, writing, running a command, waiting for you, done or stuck. Desktop notifications fire when the tab is in the background.
+- **Approvals as sticky notes.** When Claude wants to edit a file or run a command, a note pops up with **Aprovar** (approve) and **Negar** (deny).
+- **Make the room yours.** The **Ambiente** window sets the time of day (night, sunset, day), wall color and floor, hides or shows the cat, rug, plants and the coffee corner, and can put your own picture in the window, drawn as pixel art.
+- **Portuguese or English.** Pick the language in **Ajustes**; the agents are told to answer in it too.
+- **Watches Antigravity.** Antigravity IDE conversations show up as characters that light up while they work (watch-only), when there is a free desk.
+- **Live status at every desk.** The screen, the speech bubble and the desk lamp show whether each agent is thinking, reading, writing, running a command, waiting for you, done or stuck. Desktop notifications fire when the window is in the background.
 
-The interface is in Portuguese (Brazil).
+Claude runs through the [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk), Codex through the [Codex SDK](https://github.com/openai/codex/tree/main/sdk/typescript) and Gemini through the [Antigravity CLI](https://antigravity.google/docs/cli/headless/) (`agy`) in headless mode.
 
 ## Getting started
 
@@ -70,13 +71,13 @@ Everything lives in `escritorio.config.json`:
 | Key | What it sets |
 | --- | --- |
 | `porta` | Port for the local server (default `4321`) |
-| `papeis` | Instructions for each role: `coordenador`, `executor`, `revisor` |
-| `agentes` | The team: `id`, `nome` (name), `tipo` (`claude` or `codex`), `papel` (starting role) and `cor` (shirt color) |
+| `papeis` | Instructions for each job: `coordenador` (supervisor), `designer` (UI/UX), `executor` (fullstack), `tester`, `revisor` (reviewer) |
+| `agentes` | The team: `id`, `nome` (name), `tipo` (`claude`, `codex` or `antigravity`), `papel` (starting job) and `cor` (shirt color) |
 | `antigravity.pasta` | Where Antigravity keeps its conversations (`~/.gemini/antigravity-ide/conversations`) |
 | `antigravity.ativoSegundos` | How recently a conversation must have changed to count as working |
 | `antigravity.maximo` | How many Antigravity conversations to show |
 
-What you change in the page (project folder, roles, desk order, automatic switch) is saved to `.escritorio.local.json`, which is not committed.
+What you change in the page (project folder, jobs, nicknames, models, desk order, automatic switch, language) is saved to `.escritorio.local.json` (in the desktop app, in its app-data folder), which is not committed.
 
 ## Security
 
@@ -84,7 +85,8 @@ The agents can read and change files and run commands on your machine, so:
 
 - The server only listens on `127.0.0.1`, and the WebSocket only accepts connections from the office page itself.
 - Every Claude action that needs permission goes through a sticky note you approve.
-- Codex has no per-action approval in this mode, so it runs in a `read-only` sandbox unless it is an executor (or covering for one). As an executor it can edit project files without a sticky note; the settings dialog warns about this.
+- Codex has no per-action approval in this mode, so it runs in a `read-only` sandbox unless its job changes files (designer, fullstack or tester, or covering for one). Then it can edit project files without a sticky note; the settings dialog warns about this.
+- The built-in PowerShell has the same access you have. Only the office page can reach it.
 - Antigravity is only observed: the office checks when its conversation files change and never opens or modifies them.
 
 ## How it works
@@ -92,19 +94,21 @@ The agents can read and change files and run commands on your machine, so:
 ```
 browser (canvas + panel)  ⇄  WebSocket  ⇄  Node server
                                               ├─ Claude Agent SDK  → Claude agents
-                                              ├─ Codex SDK         → Codex reviewer
+                                              ├─ Codex SDK         → Codex agents
+                                              ├─ Antigravity CLI   → Gemini
+                                              ├─ node-pty          → built-in PowerShell
                                               └─ file watcher      → Antigravity (read-only)
 ```
 
 - `server/`: the office state, the agents, the team (roles and stand-ins), the orchestrator that runs general commands, and the WebSocket server (Vite runs inside it as middleware).
-- `src/`: the page. `scene.ts` draws the office on a small canvas that is scaled up; `main.ts` runs the panel.
+- `src/`: the page. `scene.ts` draws the office on a small canvas that is scaled up; `main.ts` runs the panels; `i18n.ts` holds the English texts.
+- `electron/`: the desktop app, which starts the same server and opens it in a window.
 - `shared/types.ts`: the messages exchanged between the two.
 
 ## Roadmap
 
 - New-project flow with a native folder picker and `git init`
 - A git checkpoint before every task, with an undo button, and Codex reviewing that exact diff
-- A desktop app build
 
 ## Disclaimer
 

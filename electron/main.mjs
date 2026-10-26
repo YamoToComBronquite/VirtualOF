@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
+import updater from 'electron-updater';
 import { fileURLToPath } from 'node:url';
 
 // Desktop app: one window over the same office server, started on a free port.
@@ -47,6 +48,39 @@ async function open() {
   });
 
   await win.loadURL(office.url);
+  watchForUpdates();
+}
+
+// Installed copies check the GitHub Releases of the repo, download a newer version in the
+// background and offer to restart. Running from source (npm run app) never updates itself.
+function watchForUpdates() {
+  if (!app.isPackaged) return;
+  const { autoUpdater } = updater;
+  let asked = false;
+
+  autoUpdater.on('update-downloaded', async (info) => {
+    if (asked) return;
+    asked = true;
+    const { response } = await dialog.showMessageBox(win, {
+      type: 'info',
+      title: 'Atualização pronta',
+      message: `A versão ${info.version} do VirtualOF já foi baixada.`,
+      detail: 'Reiniciar agora para atualizar? Se os agentes estiverem trabalhando, eles param. Se escolher depois, a atualização entra quando você fechar o app.',
+      buttons: ['Reiniciar e atualizar', 'Depois'],
+      defaultId: 0,
+      cancelId: 1,
+    });
+    if (response === 0) {
+      office?.shutdown();
+      autoUpdater.quitAndInstall();
+    }
+  });
+  // No internet or no release yet is normal; the app just keeps the version it has.
+  autoUpdater.on('error', (error) => console.warn('[update]', error?.message ?? error));
+
+  const check = () => autoUpdater.checkForUpdates().catch(() => {});
+  void check();
+  setInterval(check, 4 * 60 * 60 * 1000);
 }
 
 app.on('second-instance', () => {

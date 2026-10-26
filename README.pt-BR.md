@@ -34,6 +34,10 @@ O VirtualOF **não é um site**: ele roda no seu computador, porque é daí que 
 
 O instalador já traz tudo o que precisa (inclusive os motores do Claude Code e do Codex), por isso é grande.
 
+O app se atualiza sozinho: ao abrir (e a cada 4 horas) ele confere se há versão nova em Releases, baixa em segundo plano e pergunta se pode reiniciar. Suas configurações continuam.
+
+O app não tem certificado de assinatura, então na primeira instalação o Windows mostra "O Windows protegeu o seu computador". Clique em **Mais informações → Executar assim mesmo**.
+
 ### Jeito 2: rodar pelo código
 
 1. Instale o [Node.js](https://nodejs.org) 22 ou mais novo.
@@ -42,6 +46,8 @@ O instalador já traz tudo o que precisa (inclusive os motores do Claude Code e 
 4. O navegador abre em http://localhost:4321. Deixe a janela preta aberta: fechar ela desliga o escritório.
 
 Para gerar o instalador você mesmo, rode `npm run dist` (ele sai em `release/`).
+
+Para lançar uma versão nova: aumente a `version` no `package.json` e rode `npm run release` com um token do GitHub em `GH_TOKEN`. Ele publica `VirtualOF-Setup.exe`, `VirtualOF-Setup.exe.blockmap` e `latest.yml` numa Release, e os apps instalados pegam a atualização.
 
 ### Contas
 

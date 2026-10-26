@@ -36,6 +36,10 @@ VirtualOF is **not a website**: it runs on your computer, because that is where 
 
 The installer carries everything it needs (including the Claude Code and Codex engines), which is why it is large.
 
+The app updates itself: when it opens (and every 4 hours) it checks Releases for a newer version, downloads it in the background and asks before restarting. Your settings are kept.
+
+The app is not code-signed, so on first install Windows shows "Windows protected your PC". Click **More info → Run anyway**.
+
 ### Option 2: run from source
 
 1. Install [Node.js](https://nodejs.org) 22 or newer.
@@ -44,6 +48,8 @@ The installer carries everything it needs (including the Claude Code and Codex e
 4. Your browser opens http://localhost:4321. Keep the console window open: closing it turns the office off.
 
 To build the installer yourself, run `npm run dist` (output in `release/`).
+
+To ship a new version: bump `version` in `package.json` and run `npm run release` with a GitHub token in `GH_TOKEN`. It publishes `VirtualOF-Setup.exe`, `VirtualOF-Setup.exe.blockmap` and `latest.yml` to a Release, and installed apps pick it up.
 
 ### Accounts
 

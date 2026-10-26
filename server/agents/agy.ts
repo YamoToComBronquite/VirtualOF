@@ -60,7 +60,7 @@ interface AgyEvent {
 
 /**
  * Gemini through the Antigravity CLI (`agy -p --output-format stream-json`), on the user's
- * Google account (the same login as the Antigravity IDE). Headless agy has no approval prompt:
+ * Google account (agy keeps its own login, separate from the IDE's). Headless agy has no approval prompt:
  * edits inside the project are allowed and shell commands are refused unless pre-approved in
  * its own settings, so there are no sticky notes for this agent.
  */
@@ -121,7 +121,8 @@ export class AgyAgent implements Runner {
         this.child = undefined;
         resolve(this.outcome);
       };
-      const child = spawn(agyPath(), args, { cwd, windowsHide: true });
+      // No stdin: when signed out, agy would otherwise wait for an auth code nobody can type here.
+      const child = spawn(agyPath(), args, { cwd, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
       this.child = child;
 
       child.on('error', (error: NodeJS.ErrnoException) => {
@@ -138,7 +139,11 @@ export class AgyAgent implements Runner {
       createInterface({ input: child.stdout! }).on('line', (line) => {
         let event: AgyEvent;
         try {
-          event = JSON.parse(line) as AgyEvent;
+          // Fields come nested under the event's own name ({"event":"result","result":{…}}),
+          // so lift them up next to `event`.
+          const raw = JSON.parse(line) as Record<string, unknown> & { event: AgyEvent['event'] };
+          const nested = raw[raw.event];
+          event = { ...raw, ...(nested && typeof nested === 'object' ? nested : {}) } as AgyEvent;
         } catch {
           return; // not every line is an event (e.g. update notices)
         }
@@ -182,13 +187,6 @@ export class AgyAgent implements Runner {
           this.outcome = { ok: false, text: 'Interrompida pelo usuário.' };
         } else if (!this.outcome.ok && !this.outcome.text) {
           const detail = stderr.trim().split('\n').slice(-3).join('\n');
-          if (/authentication required|not signed in|login/i.test(detail)) {
-            this.office.needTerminal(
-              id,
-              '& "$env:LOCALAPPDATA\\agy\\bin\\agy.exe"',
-              'Abra o Antigravity CLI uma vez para entrar com sua conta do Google (ele abre o navegador).',
-            );
-          }
           this.fail(detail || `O agy saiu com código ${code}.`);
         }
         settle();
@@ -200,6 +198,15 @@ export class AgyAgent implements Runner {
     const { id } = this;
     this.office.write(id, 'error', text);
     if (!this.outcome.text) this.outcome = { ok: false, text };
+    if (/authenticat|sign.?in|log.?in/i.test(text)) {
+      this.office.setStatus(id, 'error', 'Falta entrar com a conta do Google');
+      this.office.needTerminal(
+        id,
+        'agy',
+        'O Antigravity CLI tem login próprio. Rode este comando num terminal novo, entre com sua conta do Google no navegador e, se aparecer um código, cole no terminal.',
+      );
+      return;
+    }
     if (LIMIT.test(text)) {
       this.outcome.limited = true;
       this.office.setStatus(id, 'error', 'Limite de uso do Google atingido');

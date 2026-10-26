@@ -428,52 +428,22 @@ function clock(ms: number) {
 }
 
 /** Subscription limits per account, then what each agent spent. */
+/** How much of the account's limit is used, and what is left until it runs out. */
+function limitCells(agent: AgentView): [string, string] {
+  const account = accountOf(agent);
+  if (!account) return ['—', '—'];
+  const quota = state.quota[account];
+  if (quota.status === 'limited') return ['esgotado', quota.resetsAt ? `volta ${clock(quota.resetsAt)}` : '0%'];
+  if (quota.utilization !== undefined) {
+    const used = Math.round(Math.min(1, quota.utilization) * 100);
+    return [`${used}%`, `${100 - used}%`];
+  }
+  if (quota.status === 'warning') return ['perto', 'pouco'];
+  if (quota.status === 'ok') return ['ok', '—'];
+  return ['—', '—'];
+}
+
 function renderUsage() {
-  $('quota').replaceChildren(
-    ...(Object.keys(ACCOUNT_NAMES) as Account[]).map((account) => {
-      const quota = state.quota[account];
-      const li = el('li', 'quota__row');
-      li.dataset.status = quota.status;
-      const head = el('div', 'quota__head');
-      const word: Record<Quota['status'], string> = {
-        unknown: 'sem dados ainda',
-        ok: 'dentro do limite',
-        warning: 'perto do limite',
-        limited: 'limite atingido',
-      };
-      head.append(el('span', 'quota__name', ACCOUNT_NAMES[account]), el('span', 'quota__state', word[quota.status]));
-      li.append(head);
-
-      if (quota.utilization !== undefined) {
-        const percent = Math.round(Math.min(1, quota.utilization) * 100);
-        const bar = el('div', 'quota__bar');
-        bar.setAttribute('role', 'meter');
-        bar.setAttribute('aria-valuenow', String(percent));
-        bar.setAttribute('aria-valuemin', '0');
-        bar.setAttribute('aria-valuemax', '100');
-        bar.setAttribute('aria-label', `${ACCOUNT_NAMES[account]}: ${percent}% usado`);
-        const fill = el('span');
-        fill.style.width = `${percent}%`;
-        bar.append(fill);
-        li.append(bar);
-      }
-
-      const details: string[] = [];
-      if (quota.utilization !== undefined) details.push(`${Math.round(quota.utilization * 100)}% usado`);
-      if (quota.window) details.push(`limite de ${quota.window}`);
-      if (quota.resetsAt) details.push(`${quota.status === 'limited' ? 'volta' : 'renova'} ${clock(quota.resetsAt)}`);
-      if (!details.length) {
-        details.push(
-          account === 'claude'
-            ? 'Aparece quando um agente Claude trabalhar.'
-            : `O ${account === 'codex' ? 'Codex' : 'Gemini'} só avisa quando bate o limite.`,
-        );
-      }
-      li.append(el('p', 'quota__detail', details.join(' · ')));
-      return li;
-    }),
-  );
-
   const rows = state.agents.filter((a) => a.controllable);
   $('usage-rows').replaceChildren(
     ...rows.map((agent) => {
@@ -483,13 +453,10 @@ function renderUsage() {
       const dot = el('span', 'usage__dot');
       dot.style.background = agent.color;
       name.append(dot, agent.name);
-      const tokens = agent.usage.inputTokens + agent.usage.outputTokens;
-      tr.append(
-        name,
-        el('td', undefined, String(agent.usage.tasks)),
-        el('td', undefined, tokens ? formatTokens(tokens) : '—'),
-        el('td', undefined, agent.usage.costUsd ? `US$ ${agent.usage.costUsd.toFixed(2)}` : '—'),
-      );
+      const [used, left] = limitCells(agent);
+      const limitCell = el('td', 'usage__limit', used);
+      limitCell.dataset.status = accountOf(agent) ? state.quota[accountOf(agent)!].status : 'unknown';
+      tr.append(name, el('td', undefined, String(agent.usage.tasks)), limitCell, el('td', undefined, left));
       return tr;
     }),
   );

@@ -14,7 +14,7 @@ Um escritório virtual em pixel art para os seus agentes de IA. Você passa tare
 - **Troca automática no limite.** Se uma conta bater o limite no meio de um comando geral, um agente de outra conta assume aquele passo, ou a própria coordenação, e o plano continua.
 - **Suas skills e plugins vão junto.** Os agentes Claude carregam as mesmas skills, plugins, servidores MCP e CLAUDE.md do seu Claude Code; o Codex usa a configuração dele em `~/.codex`. Cada mesa mostra o que o agente carregou.
 - **Ou fale direto com um agente.** Clique numa mesa, escreva a tarefa e mande. Sem terminal.
-- **Claude e Codex juntos.** Dois agentes Claude rodam pelo [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk); o Codex roda pelo [Codex SDK](https://github.com/openai/codex/tree/main/sdk/typescript), só leitura a não ser que seja executor.
+- **Claude e Codex juntos.** Dois agentes Claude rodam pelo [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk); o Codex roda pelo [Codex SDK](https://github.com/openai/codex/tree/main/sdk/typescript), só leitura a não ser que seja executor. O Gemini roda pelo [Antigravity CLI](https://antigravity.google/docs/cli/headless/) (`agy`) em modo headless e começa como reserva, pronto para cobrir quando outra conta bater o limite.
 - **Permissões viram post-its.** Quando o Claude quer editar um arquivo ou rodar um comando, aparece um post-it com **Aprovar** e **Negar**.
 - **Cartão "Abra o terminal".** Se um agente precisar de algo que só você pode fazer (login, instalação, comando interativo), ele para e o escritório mostra o comando exato para copiar. Clique em **Já rodei** e ele continua.
 - **Acompanha o Antigravity.** As conversas do Antigravity aparecem como personagens que se acendem quando estão trabalhando. É só acompanhamento: tarefas para o Antigravity continuam pelo próprio Antigravity.
@@ -25,7 +25,8 @@ Um escritório virtual em pixel art para os seus agentes de IA. Você passa tare
 - Node.js 22 ou mais novo
 - Uma conta do Claude logada no Claude Code neste computador (CLI ou extensão da IDE), ou uma `ANTHROPIC_API_KEY`
 - Para o revisor Codex: uma conta do ChatGPT. Faça login uma vez com `npx codex login` dentro da pasta do projeto
-- Opcional: o [Antigravity](https://antigravity.google), para ver os agentes dele no escritório
+- Para o agente Gemini: o [Antigravity CLI](https://antigravity.google/docs/getting-started) (`agy`), logado com sua conta do Google (usa o mesmo login do Antigravity IDE). Se faltar, o escritório mostra o comando de instalação
+- Opcional: o [Antigravity](https://antigravity.google), para ver as conversas do IDE no escritório
 
 Os agentes usam as suas próprias assinaturas e gastam os limites de sempre. Vários agentes trabalhando ao mesmo tempo gastam esses limites mais rápido.
 

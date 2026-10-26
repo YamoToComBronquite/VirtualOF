@@ -36,11 +36,18 @@
       "tipo": "codex",
       "papel": "revisor",
       "cor": "#4fb3a5"
+    },
+    {
+      "id": "gemini",
+      "nome": "Gemini",
+      "tipo": "antigravity",
+      "papel": "folga",
+      "cor": "#6f8cf0"
     }
   ],
   "antigravity": {
     "pasta": "~/.gemini/antigravity-ide/conversations",
     "ativoSegundos": 20,
-    "maximo": 3
+    "maximo": 2
   }
 }

@@ -61,7 +61,7 @@ export interface PermissionRequest {
 }
 
 /** Agents bill to an account: both Claude agents share one, Codex uses the ChatGPT one. */
-export type Account = 'claude' | 'codex';
+export type Account = 'claude' | 'codex' | 'antigravity';
 
 /** How much of an account's subscription limit is used, as far as its SDK tells us. */
 export interface Quota {

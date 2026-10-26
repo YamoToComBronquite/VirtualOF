@@ -70,15 +70,6 @@ textarea {
   cursor: pointer;
 }
 
-.office__hint {
-  position: absolute;
-  left: 16px;
-  bottom: 12px;
-  margin: 0;
-  font-size: 13px;
-  color: var(--muted);
-}
-
 /* ---------- Panel ---------- */
 
 .panel {
@@ -1243,33 +1234,13 @@ select {
 }
 
 .shell {
-  --shell-h: 260px;
-  position: relative;
   grid-row: 2;
   grid-column: 1 / -1;
   display: flex;
   flex-direction: column;
-  height: var(--shell-h);
+  height: 120px;
   background: #17131f;
   border-top: 1px solid var(--line);
-}
-
-.shell.is-max {
-  height: calc(100vh - 120px);
-}
-
-.shell__grip {
-  position: absolute;
-  inset: -3px 0 auto;
-  height: 6px;
-  cursor: ns-resize;
-  z-index: 1;
-}
-
-.shell__grip:hover,
-.shell__grip:focus-visible {
-  background: #5fd86f55;
-  outline: none;
 }
 
 .shell__head {

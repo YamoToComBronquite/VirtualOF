@@ -1,0 +1,8 @@
+node_modules/
+dist/
+*.log
+.env
+.env.*
+
+# Machine-specific settings (chosen project folder)
+.escritorio.local.json

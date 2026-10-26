@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Turno da Noite</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Silkscreen:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <main class="office">
+      <div class="office__stage"><canvas id="scene" aria-label="Escritório com os agentes nas mesas"></canvas></div>
+      <p class="office__hint">Clique numa mesa para falar com quem está sentado nela.</p>
+    </main>
+
+    <aside class="panel">
+      <header class="panel__head">
+        <h1>Turno da Noite</h1>
+        <span id="connection" class="connection">conectando…</span>
+      </header>
+
+      <form id="project-form" class="project">
+        <label for="project">Pasta do projeto</label>
+        <div class="project__row">
+          <input id="project" name="project" placeholder="C:\Users\…\meu-projeto" autocomplete="off" spellcheck="false" />
+          <button type="submit">Usar</button>
+        </div>
+      </form>
+
+      <ul id="team" class="team" aria-label="Equipe"></ul>
+
+      <section id="desk" class="desk" hidden>
+        <h2 id="desk-name"></h2>
+        <p id="desk-activity" class="desk__activity"></p>
+        <form id="task-form" class="task">
+          <label for="task" id="task-label">Tarefa</label>
+          <textarea id="task" rows="4"></textarea>
+          <div class="task__actions">
+            <button type="submit" id="send">Mandar tarefa</button>
+            <button type="button" id="stop" class="ghost">Parar</button>
+          </div>
+        </form>
+        <p id="watch-only" class="watch-only" hidden>
+          O escritório só acompanha o Antigravity. Para dar uma tarefa, abra o Antigravity.
+        </p>
+      </section>
+
+      <section class="terminal" aria-label="Precisa do terminal">
+        <ul id="terminal"></ul>
+      </section>
+
+      <section class="notes" aria-label="Pedidos de permissão">
+        <ul id="notes"></ul>
+      </section>
+
+      <section class="log">
+        <div class="log__head">
+          <h2>Registro</h2>
+          <label class="log__filter"><input type="checkbox" id="only-selected" /> Só da mesa escolhida</label>
+        </div>
+        <ol id="log"></ol>
+      </section>
+
+      <div id="toast" class="toast" role="status" hidden></div>
+    </aside>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

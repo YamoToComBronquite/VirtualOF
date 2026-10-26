@@ -1,0 +1,113 @@
+import { spawn } from 'node:child_process';
+import { existsSync, statSync } from 'node:fs';
+import { createServer } from 'node:http';
+import { isAbsolute, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createServer as createVite } from 'vite';
+import { WebSocketServer, type WebSocket } from 'ws';
+import type { ClientMessage, ServerMessage } from '../shared/types.ts';
+import { watchAntigravity } from './agents/antigravity.ts';
+import { ClaudeAgent } from './agents/claude.ts';
+import { CodexAgent } from './agents/codex.ts';
+import { loadConfig, saveProject } from './config.ts';
+import { Office } from './office.ts';
+
+const HOST = '127.0.0.1';
+const root = fileURLToPath(new URL('..', import.meta.url));
+const config = loadConfig();
+const office = new Office(config.projeto);
+
+const runners = new Map<string, ClaudeAgent | CodexAgent>();
+for (const agent of config.agentes) {
+  runners.set(agent.id, agent.tipo === 'claude' ? new ClaudeAgent(agent, office) : new CodexAgent(agent, office));
+  office.addAgent({
+    id: agent.id,
+    name: agent.nome,
+    kind: agent.tipo,
+    role: agent.papel,
+    color: agent.cor,
+    status: 'idle',
+    activity: 'Livre',
+    controllable: true,
+    usage: { inputTokens: 0, outputTokens: 0 },
+  });
+}
+watchAntigravity(config.antigravity, office);
+
+function isFolder(path: string) {
+  return isAbsolute(path) && existsSync(path) && statSync(path).isDirectory();
+}
+
+function handle(msg: ClientMessage) {
+  switch (msg.type) {
+    case 'task': {
+      const runner = runners.get(msg.agentId);
+      const prompt = msg.prompt.trim();
+      if (!runner || !prompt) return;
+      if (!isFolder(office.project)) return office.notice('Escolha a pasta do projeto antes de mandar uma tarefa.');
+      if (runner.busy) return office.notice('Esse agente ainda está numa tarefa. Espere terminar ou clique em Parar.');
+      void runner.run(prompt, office.project);
+      return;
+    }
+    case 'stop':
+      runners.get(msg.agentId)?.stop();
+      return;
+    case 'permission':
+      office.answerPermission(msg.id, msg.allow);
+      return;
+    case 'terminal-done':
+      office.clearTerminal(msg.id);
+      return;
+    case 'project': {
+      const path = resolve(msg.path.trim());
+      if (!isFolder(path)) return office.notice(`Essa pasta não existe: ${msg.path}`);
+      office.setProject(path);
+      saveProject(path);
+      return;
+    }
+  }
+}
+
+const server = createServer();
+const vite = await createVite({
+  root,
+  appType: 'spa',
+  server: { middlewareMode: true, hmr: { server } },
+});
+server.on('request', (req, res) => vite.middlewares(req, res));
+
+// The agents can run commands on this machine, so only the office page itself may connect:
+// any other site open in the browser could otherwise reach a localhost socket.
+const allowedOrigins = new Set([`http://localhost:${config.porta}`, `http://${HOST}:${config.porta}`]);
+const wss = new WebSocketServer({ noServer: true });
+server.on('upgrade', (req, socket, head) => {
+  if (req.url !== '/ws') return; // Vite's HMR socket handles its own upgrades.
+  if (!allowedOrigins.has(req.headers.origin ?? '')) {
+    socket.destroy();
+    return;
+  }
+  wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws));
+});
+
+wss.on('connection', (ws: WebSocket) => {
+  const send = (msg: ServerMessage) => ws.send(JSON.stringify(msg));
+  send(office.snapshot());
+  const unsubscribe = office.subscribe(send);
+  ws.on('message', (data) => {
+    try {
+      handle(JSON.parse(String(data)) as ClientMessage);
+    } catch {
+      // Ignore malformed messages; the page only sends well-formed ones.
+    }
+  });
+  ws.on('close', unsubscribe);
+});
+
+server.listen(config.porta, HOST, () => {
+  const url = `http://localhost:${config.porta}`;
+  console.log(`\n  Escritório aberto em ${url}\n  Deixe esta janela aberta; fechar ela desliga o escritório.\n`);
+  if (process.argv.includes('--abrir')) {
+    const [cmd, args] = process.platform === 'win32' ? ['cmd', ['/c', 'start', '', url]] : ['open', [url]];
+    spawn(cmd, args, { detached: true, stdio: 'ignore' }).unref();
+  }
+});

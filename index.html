@@ -16,12 +16,10 @@
     <main class="office">
       <div class="office__stage">
         <canvas id="scene" aria-label="Escritório com os agentes nas mesas"></canvas>
-        <p class="office__hint">Clique numa mesa para falar direto com quem está sentado nela.</p>
       </div>
     </main>
 
     <section id="shell" class="shell" aria-labelledby="shell-title" hidden>
-      <div id="shell-grip" class="shell__grip" role="separator" aria-orientation="horizontal" aria-label="Arrastar para mudar a altura do terminal" tabindex="0"></div>
       <header class="shell__head">
         <h2 id="shell-title" class="shell__tab">Terminal</h2>
         <span id="shell-cwd" class="shell__cwd"></span>
@@ -29,7 +27,6 @@
         <div class="shell__tools">
           <button type="button" id="shell-restart" class="icon" title="Novo PowerShell (fecha o atual)" aria-label="Novo PowerShell"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10 M3 8h10"/></svg></button>
           <button type="button" id="shell-kill" class="icon" title="Encerrar o PowerShell" aria-label="Encerrar o PowerShell"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 4.5h9 M6.5 4.5v-2h3v2 M4.5 4.5l.7 9h5.6l.7-9 M7 7v4.5 M9 7v4.5"/></svg></button>
-          <button type="button" id="shell-max" class="icon" title="Maximizar" aria-label="Maximizar o terminal" aria-pressed="false"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3h10v10H3z M3 6h10"/></svg></button>
           <button type="button" id="shell-close" class="icon" title="Esconder (Ctrl + ')" aria-label="Esconder o terminal"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8 M12 4l-8 8"/></svg></button>
         </div>
       </header>

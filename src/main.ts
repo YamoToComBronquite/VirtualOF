@@ -1099,8 +1099,6 @@ $('open-shell').addEventListener('click', () => shell.toggle());
 $('shell-close').addEventListener('click', () => shell.hide());
 $('shell-restart').addEventListener('click', () => shell.restart());
 $('shell-kill').addEventListener('click', () => shell.kill());
-$('shell-max').addEventListener('click', () => shell.toggleMaximized($('shell-max')));
-shell.makeResizable($('shell-grip'));
 document.addEventListener('keydown', (event) => {
   if (event.ctrlKey && (event.key === "'" || event.code === 'Backquote')) {
     event.preventDefault();

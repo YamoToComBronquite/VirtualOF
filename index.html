@@ -175,10 +175,21 @@
     <dialog id="settings" class="settings" aria-labelledby="settings-title">
       <form method="dialog" id="settings-form">
         <h2 id="settings-title">Configurações da equipe</h2>
+        <section class="accounts" aria-labelledby="accounts-title">
+          <h3 id="accounts-title">Contas</h3>
+          <p class="hint">
+            As mesas usam as contas logadas neste computador. Mesa sem conta pode ficar com uma IA grátis.
+          </p>
+          <ul id="settings-accounts" class="accounts__list"></ul>
+        </section>
         <p class="hint">
-          Escolha o papel de cada um e a ordem das mesas. Precisa de um supervisor e pelo menos um fullstack.
+          Escolha a IA e o papel de cada um e a ordem das mesas. Precisa de um supervisor e pelo menos um fullstack.
         </p>
         <ol id="settings-team" class="settings__team"></ol>
+        <div class="settings__team-actions">
+          <button type="button" id="team-add" class="ghost">Adicionar agente</button>
+          <button type="button" id="team-suggest" class="ghost">Montar com minhas contas</button>
+        </div>
         <fieldset class="choice choice--lang">
           <legend>Idioma</legend>
           <label><input type="radio" name="idioma" value="pt" /> Português</label>

@@ -24,7 +24,12 @@ const packaged = import.meta.url.includes('app.asar');
 
 /** Claude Code binary, only when the SDK can't find it on its own (inside the app). */
 export function claudeBinary(): string | undefined {
-  if (!packaged || process.platform !== 'win32') return undefined;
+  return packaged ? claudeExecutable() : undefined;
+}
+
+/** The Claude Code binary that ships with the SDK on Windows, for the login command. */
+export function claudeExecutable(): string | undefined {
+  if (process.platform !== 'win32') return undefined;
   const file = packageFile('@anthropic-ai/claude-agent-sdk-win32-x64', 'claude.exe');
   return file && existsSync(file) ? file : undefined;
 }

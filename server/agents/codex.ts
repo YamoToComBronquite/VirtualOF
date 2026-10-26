@@ -7,7 +7,7 @@ import { clip } from './describe.ts';
 import type { RoleBrief, RunOutcome, Runner } from './runner.ts';
 
 /** Codex ships inside this project's packages, so its login runs that same executable. */
-function loginCommand() {
+export function loginCommand() {
   const exe = codexBinary();
   return exe ? `& "${exe}" login` : 'npx codex login';
 }

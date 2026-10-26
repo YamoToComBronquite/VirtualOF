@@ -1,8 +1,12 @@
 import {
+  DESK_COUNT,
   EDITING_ROLES,
+  FREE_ACCOUNTS,
   ROLE_NAMES,
   WORKER_ROLES,
   type Account,
+  type AccountStatus,
+  type AgentKind,
   type ModelCatalog,
   type Quota,
   type SkillCatalog,
@@ -52,9 +56,15 @@ const state = {
   permissions: [] as PermissionRequest[],
   terminal: [] as TerminalAlert[],
   plan: null as Plan | null,
-  quota: { claude: { status: 'unknown' }, codex: { status: 'unknown' }, antigravity: { status: 'unknown' } } as Record<Account, Quota>,
+  quota: {
+    claude: { status: 'unknown' },
+    codex: { status: 'unknown' },
+    antigravity: { status: 'unknown' },
+    opencode: { status: 'unknown' },
+  } as Record<Account, Quota>,
   autoSwitch: true,
-  models: { claude: [], codex: [], antigravity: [] } as ModelCatalog,
+  models: { claude: [], codex: [], antigravity: [], opencode: [] } as ModelCatalog,
+  accounts: undefined as Record<Account, AccountStatus> | undefined,
   project: '',
   selectedId: undefined as string | undefined,
   /** Who the message box talks to: the whole team (general command) or one agent. */
@@ -130,6 +140,7 @@ function receive(msg: ServerMessage) {
       state.quota = msg.quota;
       state.autoSwitch = msg.autoSwitch;
       state.models = msg.models;
+      state.accounts = msg.accounts;
       state.project = msg.project;
       if (!state.selectedId || !agentById(state.selectedId)) state.selectedId = msg.agents[0]?.id;
       scene.doneCount = msg.log.filter((e) => e.kind === 'result').length;
@@ -137,8 +148,19 @@ function receive(msg: ServerMessage) {
       renderProject();
       renderAll();
       redraw();
-      // localhost:4321/#configuracoes opens straight into the team settings
-      if (location.hash === '#configuracoes' && !$<HTMLDialogElement>('settings').open) openSettings();
+      // localhost:4321/#configuracoes opens straight into the team settings, and so does an
+      // empty office the first time the page connects, so the user can put a team together.
+      if (!$<HTMLDialogElement>('settings').open && (location.hash === '#configuracoes' || (!askedForTeam && !teamAgents().length))) {
+        openSettings();
+      }
+      askedForTeam = true;
+      break;
+    case 'accounts':
+      state.accounts = msg.accounts;
+      if ($<HTMLDialogElement>('settings').open) {
+        renderAccounts();
+        renderSettings();
+      }
       break;
     case 'agent': {
       const index = state.agents.findIndex((a) => a.id === msg.agent.id);
@@ -448,6 +470,7 @@ const ACCOUNT_NAMES: Record<Account, string> = {
   claude: 'Conta do Claude',
   codex: 'Conta do ChatGPT (Codex)',
   antigravity: 'Conta do Google (Gemini)',
+  opencode: 'OpenCode (modelos grátis)',
 };
 
 /** What drives each agent, for the settings list. */
@@ -455,6 +478,7 @@ const ENGINE_NAMES: Record<AgentView['kind'], string> = {
   claude: 'Claude',
   codex: 'Codex',
   antigravity: 'Gemini pelo Antigravity CLI',
+  opencode: 'OpenCode, modelos grátis',
 };
 
 function clock(ms: number) {
@@ -819,27 +843,132 @@ function toast(text: string) {
   toastTimer = window.setTimeout(() => (box.hidden = true), 5000);
 }
 
-/* ---------- Settings: roles, nicknames, models and desk order ---------- */
+/* ---------- Settings: accounts, who sits at each desk, roles, models and desk order ---------- */
 
-let draft: { agent: AgentView; role: RoleKey; nickname: string; model: string }[] = [];
+/** The office's own agents (Antigravity IDE conversations are only watched). */
+function teamAgents() {
+  return state.agents.filter((a) => a.controllable && a.roleKey);
+}
+
+/** Set once the first snapshot arrived, so an empty office opens Ajustes only once per page. */
+let askedForTeam = false;
+
+type DraftEntry = { id: string; kind: AgentKind; role: RoleKey; nickname: string; model: string; agent?: AgentView };
+let draft: DraftEntry[] = [];
+let nextDraftId = 1;
+
+const KINDS: AgentKind[] = ['claude', 'codex', 'antigravity', 'opencode'];
+const DRAFT_COLORS = ['#e3a04f', '#4fb3a5', '#d9705a', '#5fbf8f', '#6f8cf0', '#c98bd9'];
+
+/** A paid account counts only once this machine has its login; free ones always do. */
+function hasAccount(kind: AgentKind) {
+  return FREE_ACCOUNTS.includes(kind) || state.accounts?.[kind].signedIn === true;
+}
+
+function engineOption(kind: AgentKind) {
+  const free = FREE_ACCOUNTS.includes(kind);
+  const status = state.accounts?.[kind];
+  const label = { claude: 'Claude', codex: 'Codex (ChatGPT)', antigravity: 'Gemini', opencode: 'OpenCode' }[kind];
+  if (free) return `${label} · ${translate('grátis')}${status && !status.installed ? ` · ${translate('falta instalar')}` : ''}`;
+  return hasAccount(kind) ? label : `${label} · ${translate('sem login')}`;
+}
+
+function newEntry(kind: AgentKind, role: RoleKey): DraftEntry {
+  return { id: `novo-${nextDraftId++}`, kind, role, nickname: '', model: '' };
+}
+
+/**
+ * A full team from the accounts this machine has: the paid ones take planning, building and
+ * review, and every desk they can't cover gets a free AI, alternating the two free ones so a
+ * limit on one doesn't stop them all.
+ */
+function suggestedTeam(): DraftEntry[] {
+  const free: AgentKind[] = ['opencode', 'antigravity'];
+  let turn = 0;
+  const pick = (...prefer: AgentKind[]) => prefer.find(hasAccount) ?? free[turn++ % free.length];
+  return [
+    newEntry(pick('claude', 'codex'), 'coordenador'),
+    newEntry(pick('codex', 'claude'), 'designer'),
+    newEntry(pick('claude', 'codex'), 'executor'),
+    newEntry(pick('codex'), 'executor'),
+    newEntry(pick(), 'tester'),
+    newEntry(pick('claude', 'codex'), 'revisor'),
+  ];
+}
+
+/** What the desk will look like, for the portrait and names before it is saved. */
+function previewAgent(entry: DraftEntry, index: number): AgentView {
+  const base = entry.agent ?? {
+    id: entry.id,
+    name: '',
+    defaultName: '',
+    role: '',
+    color: DRAFT_COLORS[index % DRAFT_COLORS.length],
+    status: 'idle' as const,
+    activity: '',
+    controllable: true,
+    usage: { tasks: 0, inputTokens: 0, outputTokens: 0 },
+  };
+  const engine = { claude: 'Claude', codex: 'Codex', antigravity: 'Gemini', opencode: 'OpenCode' }[entry.kind];
+  const same = draft.slice(0, index).filter((d) => d.kind === entry.kind).length;
+  const name = same ? `${engine} ${same + 1}` : engine;
+  return { ...base, kind: entry.kind, defaultName: name, name: entry.nickname.trim() || name };
+}
 
 function openSettings() {
-  draft = state.agents
-    .filter((a) => a.controllable && a.roleKey)
-    .map((agent) => ({
-      agent,
-      role: agent.roleKey!,
-      nickname: agent.name === agent.defaultName ? '' : agent.name,
-      model: agent.model ?? '',
-    }));
+  draft = teamAgents().map((agent) => ({
+    id: agent.id,
+    kind: agent.kind,
+    role: agent.roleKey!,
+    nickname: agent.name === agent.defaultName ? '' : agent.name,
+    model: agent.model ?? '',
+    agent,
+  }));
   $<HTMLInputElement>('auto-switch').checked = state.autoSwitch;
   for (const radio of document.querySelectorAll<HTMLInputElement>('input[name="idioma"]')) radio.checked = radio.value === getLang();
+  send({ type: 'check-accounts' }); // a login done in the terminal shows up without restarting
+  renderAccounts();
   renderSettings();
   $<HTMLDialogElement>('settings').showModal();
 }
 
+function renderAccounts() {
+  const accounts = state.accounts;
+  $('settings-accounts').replaceChildren(
+    ...KINDS.map((kind) => {
+      const li = el('li', 'account');
+      const info = el('span', 'account__info');
+      const status = accounts?.[kind];
+      const free = FREE_ACCOUNTS.includes(kind);
+      const [tone, text] = !status
+        ? ['', '…']
+        : !status.installed
+          ? ['off', 'Falta instalar']
+          : free
+            ? ['on', 'Grátis']
+            : status.signedIn
+              ? ['on', 'Logado neste computador']
+              : ['off', 'Sem login'];
+      const badge = el('span', 'account__status', text);
+      badge.dataset.state = tone;
+      info.append(el('strong', undefined, ACCOUNT_NAMES[kind]), badge);
+      const button = el('button', 'ghost small', !status?.installed ? 'Instalar' : status.signedIn === false ? 'Entrar' : free ? 'Configurar' : 'Entrar de novo');
+      button.type = 'button';
+      button.disabled = !status;
+      button.addEventListener('click', () => {
+        if (!status) return;
+        $<HTMLDialogElement>('settings').close('cancel');
+        shell.run(status.login);
+        toast(status.hint);
+      });
+      li.append(info, button);
+      return li;
+    }),
+  );
+}
+
 function draftProblem() {
-  if (!draft.length) return 'O escritório não mandou a equipe. Feche e abra o escritório de novo.';
+  if (!draft.length) return null; // an empty office is allowed; it just can't take commands
   if (draft.filter((d) => d.role === 'coordenador').length !== 1) return 'Escolha exatamente um supervisor.';
   if (!draft.some((d) => d.role === 'executor')) return 'Escolha pelo menos um fullstack.';
   return null;
@@ -848,31 +977,52 @@ function draftProblem() {
 function renderSettings() {
   $('settings-team').replaceChildren(
     ...draft.map((entry, index) => {
+      const agent = previewAgent(entry, index);
       const li = el('li', 'member');
       const frame = el('span', 'card__portrait');
-      frame.style.setProperty('--agent', entry.agent.color);
-      frame.append(portrait(entry.agent));
+      frame.style.setProperty('--agent', agent.color);
+      frame.append(portrait(agent));
 
       const info = el('span', 'member__info');
       // Typing a nickname only updates the draft; re-rendering here would steal the focus.
       const nickname = el('input', 'member__nickname');
       nickname.value = entry.nickname;
-      nickname.placeholder = entry.agent.defaultName;
+      nickname.placeholder = agent.defaultName;
       nickname.maxLength = 24;
-      nickname.setAttribute('aria-label', `Apelido de ${entry.agent.defaultName}`);
+      nickname.setAttribute('aria-label', `Apelido de ${agent.defaultName}`);
       nickname.addEventListener('input', () => (entry.nickname = nickname.value));
-      info.append(nickname, el('span', 'card__role', `${entry.agent.defaultName} · ${translate(ENGINE_NAMES[entry.agent.kind])}`));
-      if (entry.agent.kind === 'codex' && EDITING_ROLES.includes(entry.role)) {
+      info.append(nickname, el('span', 'card__role', translate(ENGINE_NAMES[entry.kind])));
+      if (!hasAccount(entry.kind)) {
+        info.append(el('span', 'member__warn', 'Este computador não tem login nessa conta. Entre em Contas, acima.'));
+      }
+      if (entry.kind === 'codex' && EDITING_ROLES.includes(entry.role)) {
         info.append(el('span', 'member__warn', 'Como executor, o Codex edita arquivos sem post-it de permissão.'));
       }
-      if (entry.agent.kind === 'antigravity') {
+      if (entry.kind === 'antigravity') {
         info.append(
           el('span', 'member__warn', 'O Gemini edita arquivos do projeto sem post-it; comandos de terminal ficam bloqueados.'),
         );
       }
+      if (entry.kind === 'opencode') {
+        info.append(el('span', 'member__warn', 'O OpenCode edita arquivos sem post-it; o que ele pedir permissão para fazer é recusado.'));
+      }
+
+      const engine = el('select');
+      engine.setAttribute('aria-label', `IA de ${agent.name}`);
+      for (const kind of KINDS) {
+        const option = el('option', undefined, engineOption(kind));
+        option.value = kind;
+        option.selected = kind === entry.kind;
+        engine.append(option);
+      }
+      engine.addEventListener('change', () => {
+        entry.kind = engine.value as AgentKind;
+        entry.model = ''; // a model belongs to the AI it was picked for
+        renderSettings();
+      });
 
       const select = el('select');
-      select.setAttribute('aria-label', `Papel de ${entry.agent.name}`);
+      select.setAttribute('aria-label', `Papel de ${agent.name}`);
       for (const key of Object.keys(ROLE_NAMES) as RoleKey[]) {
         const option = el('option', undefined, ROLE_NAMES[key]);
         option.value = key;
@@ -885,8 +1035,8 @@ function renderSettings() {
       });
 
       const model = el('select');
-      model.setAttribute('aria-label', `Modelo de ${entry.agent.defaultName}`);
-      const options = state.models[entry.agent.kind] ?? [];
+      model.setAttribute('aria-label', `Modelo de ${agent.defaultName}`);
+      const options = state.models[entry.kind] ?? [];
       // Keep a saved model visible even if the list hasn't loaded it (yet).
       const known = options.some((m) => m.id === entry.model);
       for (const option of known ? options : [...options, { id: entry.model, label: entry.model }]) {
@@ -898,7 +1048,7 @@ function renderSettings() {
       model.addEventListener('change', () => (entry.model = model.value));
 
       const choices = el('span', 'member__choices');
-      choices.append(select, model);
+      choices.append(engine, select, model);
 
       const move = (delta: number) => {
         const target = index + delta;
@@ -908,20 +1058,36 @@ function renderSettings() {
       const up = el('button', 'ghost small', '↑');
       up.type = 'button';
       up.disabled = index === 0;
-      up.setAttribute('aria-label', `Subir ${entry.agent.name}`);
+      up.setAttribute('aria-label', `Subir ${agent.name}`);
       up.addEventListener('click', () => move(-1));
       const down = el('button', 'ghost small', '↓');
       down.type = 'button';
       down.disabled = index === draft.length - 1;
-      down.setAttribute('aria-label', `Descer ${entry.agent.name}`);
+      down.setAttribute('aria-label', `Descer ${agent.name}`);
       down.addEventListener('click', () => move(1));
+      const remove = el('button', 'ghost small', '×');
+      remove.type = 'button';
+      remove.title = 'Esvaziar a mesa';
+      remove.setAttribute('aria-label', `Tirar ${agent.name} da equipe`);
+      remove.addEventListener('click', () => {
+        draft.splice(index, 1);
+        renderSettings();
+      });
       const order = el('span', 'member__order');
-      order.append(up, down);
+      order.append(up, down, remove);
 
       li.append(frame, info, choices, order);
       return li;
     }),
   );
+  if (!draft.length) {
+    const empty = el('li', 'settings__empty', 'Nenhuma mesa ocupada. Adicione um agente ou monte a equipe com as suas contas.');
+    $('settings-team').append(empty);
+  }
+  const full = draft.length >= DESK_COUNT;
+  $<HTMLButtonElement>('team-add').disabled = full;
+  $('team-add').textContent = translate(full ? 'Todas as mesas ocupadas' : 'Adicionar agente');
+
   const problem = draftProblem();
   const warning = $('settings-warning');
   warning.hidden = !problem;
@@ -929,13 +1095,26 @@ function renderSettings() {
   $('settings-form').querySelector<HTMLButtonElement>('button[value="save"]')!.disabled = !!problem;
 }
 
+$('team-add').addEventListener('click', () => {
+  if (draft.length >= DESK_COUNT) return;
+  // The first desk plans; the next ones build. Paid accounts first, then the free AI.
+  const kind = (['claude', 'codex'] as AgentKind[]).find(hasAccount) ?? 'opencode';
+  draft.push(newEntry(kind, draft.some((d) => d.role === 'coordenador') ? 'executor' : 'coordenador'));
+  renderSettings();
+});
+
+$('team-suggest').addEventListener('click', () => {
+  draft = suggestedTeam();
+  renderSettings();
+});
+
 $('open-settings').addEventListener('click', openSettings);
 $('settings').addEventListener('close', () => {
   const dialog = $<HTMLDialogElement>('settings');
   if (dialog.returnValue === 'save' && !draftProblem()) {
     send({
       type: 'team',
-      team: draft.map((d) => ({ id: d.agent.id, role: d.role, nickname: d.nickname, model: d.model })),
+      team: draft.map((d) => ({ id: d.id, kind: d.kind, role: d.role, nickname: d.nickname, model: d.model })),
       autoSwitch: $<HTMLInputElement>('auto-switch').checked,
     });
   }
@@ -1074,7 +1253,7 @@ applyView(readStored(VIEW_KEY));
 
 /* ---------- Skills: see what is installed and import new ones ---------- */
 
-const SKILL_OWNERS: Record<Account, string> = { claude: 'Claude', codex: 'Codex', antigravity: 'Gemini' };
+const SKILL_OWNERS: Record<Account, string> = { claude: 'Claude', codex: 'Codex', antigravity: 'Gemini', opencode: 'OpenCode' };
 const SKILL_LIMIT_BYTES = 10 * 1024 * 1024;
 let pendingSkill: SkillFile[] | null = null;
 

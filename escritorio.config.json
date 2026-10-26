@@ -23,50 +23,6 @@
       "instrucoes": "Você é o revisor deste escritório. Revise o que foi pedido contra o AGENTS.md (se existir) e aponte problemas concretos, com arquivo e linha. Não edite nada. Se estiver tudo certo, diga isso claramente."
     }
   },
-  "agentes": [
-    {
-      "id": "chefe",
-      "nome": "Claude",
-      "tipo": "claude",
-      "papel": "coordenador",
-      "cor": "#e3a04f"
-    },
-    {
-      "id": "revisor",
-      "nome": "Codex",
-      "tipo": "codex",
-      "papel": "designer",
-      "cor": "#4fb3a5"
-    },
-    {
-      "id": "dev",
-      "nome": "Claude Dev",
-      "tipo": "claude",
-      "papel": "executor",
-      "cor": "#d9705a"
-    },
-    {
-      "id": "astra",
-      "nome": "Astra",
-      "tipo": "codex",
-      "papel": "executor",
-      "cor": "#5fbf8f"
-    },
-    {
-      "id": "gemini",
-      "nome": "Gemini",
-      "tipo": "antigravity",
-      "papel": "tester",
-      "cor": "#6f8cf0"
-    },
-    {
-      "id": "critico",
-      "nome": "Claude Revisor",
-      "tipo": "claude",
-      "papel": "revisor",
-      "cor": "#c98bd9"
-    }
-  ],
   "antigravity": {
     "pasta": "~/.gemini/antigravity-ide/conversations",
     "ativoSegundos": 20,

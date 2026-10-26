@@ -8,6 +8,7 @@ export const SKILL_DIRS: Record<Account, string> = {
   claude: join(homedir(), '.claude', 'skills'),
   codex: join(homedir(), '.codex', 'skills'),
   antigravity: join(homedir(), '.gemini', 'antigravity-cli', 'skills'),
+  opencode: join(homedir(), '.config', 'opencode', 'skills'),
 };
 
 const MAX_FILES = 300;
@@ -26,7 +27,7 @@ export function parseSkill(text: string): { name?: string; description?: string 
 }
 
 export function listSkills(): SkillCatalog {
-  const catalog = { claude: [], codex: [], antigravity: [] } as SkillCatalog;
+  const catalog = { claude: [], codex: [], antigravity: [], opencode: [] } as SkillCatalog;
   for (const account of Object.keys(SKILL_DIRS) as Account[]) {
     const root = SKILL_DIRS[account];
     if (!existsSync(root)) continue;

@@ -5,6 +5,7 @@ import { homedir } from 'node:os';
 import { extname, isAbsolute, join, normalize, resolve, sep } from 'node:path';
 import { WebSocketServer, type WebSocket } from 'ws';
 import type { ClientMessage, ServerMessage } from '../shared/types.ts';
+import { detectAccounts } from './accounts.ts';
 import { watchAntigravity } from './agents/antigravity.ts';
 import { loadConfig, saveLanguage, saveProject } from './config.ts';
 import { loadModels } from './models.ts';
@@ -65,7 +66,7 @@ function isFolder(path: string) {
 
 export async function startOffice(options: OfficeOptions) {
   const config = loadConfig();
-  const office = new Office(config.projeto);
+  const office = new Office(config.projeto, detectAccounts());
   office.autoSwitch = config.trocaAutomatica ?? true;
   office.lang = config.idioma ?? 'pt';
   office.models = await loadModels((models) => office.setModels(models));
@@ -140,6 +141,9 @@ export async function startOffice(options: OfficeOptions) {
         return;
       case 'stop-plan':
         orchestrator.stop();
+        return;
+      case 'check-accounts':
+        office.setAccounts(detectAccounts());
         return;
       case 'list-skills':
         office.publish({ type: 'skills', skills: listSkills() });

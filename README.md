@@ -8,12 +8,12 @@ A pixel-art virtual office for your AI coding agents. Hand out tasks, approve wh
 
 ## What it does
 
-- **A team with real jobs.** Six desks, one job each: a **supervisor** who plans, a **UI/UX designer**, two **fullstack** developers, a **tester** and a **reviewer**. The default team spreads them over three accounts (Claude, ChatGPT and Google) so one limit doesn't stop everyone. In **Ajustes** (settings) you change each agent's job, nickname and model (Claude: Opus, Sonnet or Haiku; Codex: the models in your Codex setup; Gemini: whatever `agy models` lists), and the desk order.
+- **A team built from your accounts.** The office starts empty. In **Ajustes** (settings), the **Contas** (accounts) section shows which accounts are signed in on this machine, with a button to sign in to (or install) each one from the built-in PowerShell. Then you fill up to six desks: **Adicionar agente** adds one at a time, and **Montar com minhas contas** builds a whole team (supervisor, UI/UX designer, two fullstack developers, tester and reviewer) using Claude and ChatGPT where you are signed in and a free AI everywhere else. For each desk you pick the AI (Claude, Codex, Gemini or OpenCode), job, nickname and model, and you can reorder or empty desks.
 - **A chat, like any AI app.** The right-hand panel is a conversation: your messages, the agents' replies and what they are doing scroll up, and the message box stays at the bottom. **Enter** sends, **Shift + Enter** adds a line. While something runs, the send button turns into a stop button.
 - **Talk to the team or to one agent.** Under **Para** (to), pick **Equipe** (team) for a general command, or pick one agent from the list. Clicking a desk picks that agent too, and the conversation then shows only that agent.
 - **One general command, a whole team.** The supervisor plans the steps in the best order, the office hands each step to the right agent, and after every step the supervisor can rework the rest of the plan (for example, to fix what the reviewer found). The plan sits above the message box as a live checklist.
 - **The team at a glance.** A drawer on the left (open or close it from its tab) shows every agent with their job, what they are doing and a **stress** meter: how close their account is to its limit. Below it, **Consumo** (usage) lists tasks, how much of the limit is used and how much is left.
-- **Automatic switch on limits, with a handover note.** When an account hits its limit mid-task, an agent on another account takes over, free accounts (Gemini) first. The new agent gets the original task, what the previous one already did and where it stopped, so it carries on instead of starting over. This works for general commands and for direct chats.
+- **Automatic switch on limits, with a handover note.** When an account hits its limit mid-task, an agent on another account takes over, free ones (Gemini and OpenCode) first. The new agent gets the original task, what the previous one already did and where it stopped, so it carries on instead of starting over. This works for general commands and for direct chats.
 - **Skills for everyone.** The **Skills** window lists your skills once for the whole team. Importing one installs it for Claude, Codex and Gemini, so every agent, including ones added later, gets it. **Passar para todos** (share with everyone) copies skills that only some agents have. Only import skills you trust: they can include scripts the agents run.
 - **Your setup comes along.** Claude agents load the same skills, plugins, MCP servers and CLAUDE.md as your Claude Code; Codex uses its own `~/.codex` setup. Each agent's details list what it loaded.
 - **Built-in PowerShell.** A real terminal along the bottom of the window (button **Terminal** or Ctrl + '), opened in the project folder.
@@ -24,7 +24,7 @@ A pixel-art virtual office for your AI coding agents. Hand out tasks, approve wh
 - **Watches Antigravity.** Antigravity IDE conversations show up as characters that light up while they work (watch-only), when there is a free desk.
 - **Live status at every desk.** The screen, the speech bubble and the desk lamp show whether each agent is thinking, reading, writing, running a command, waiting for you, done or stuck. Desktop notifications fire when the window is in the background.
 
-Claude runs through the [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk), Codex through the [Codex SDK](https://github.com/openai/codex/tree/main/sdk/typescript) and Gemini through the [Antigravity CLI](https://antigravity.google/docs/cli/headless/) (`agy`) in headless mode.
+Claude runs through the [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk), Codex through the [Codex SDK](https://github.com/openai/codex/tree/main/sdk/typescript) Gemini through the [Antigravity CLI](https://antigravity.google/docs/cli/headless/) (`agy`) and the free models through [OpenCode](https://opencode.ai/docs/cli/) (`opencode run`), both in headless mode.
 
 ## Getting started
 
@@ -55,11 +55,12 @@ To ship a new version: bump `version` in `package.json` and run `npm run release
 
 ### Accounts
 
-Everyone uses their own subscriptions, and the agents count against their usual limits:
+Everyone uses their own subscriptions, and the agents count against their usual limits. Nobody needs all of them: **Contas** in Ajustes shows what this machine has, and desks without an account can use a free AI.
 
 - **Claude:** an account signed in to Claude Code on this machine (the CLI or the IDE extension), or an `ANTHROPIC_API_KEY`.
 - **Codex:** a ChatGPT account. If it isn't signed in, the office shows the command on a **Precisa do terminal** card, ready to run in the built-in PowerShell.
 - **Gemini:** the [Antigravity CLI](https://antigravity.google/docs/getting-started) (`agy`), signed in with your Google account (run `agy` once in the built-in PowerShell; it has its own login, separate from the IDE). If it is missing, the office shows the install command.
+- **OpenCode (free):** [OpenCode](https://opencode.ai) (`npm install -g opencode-ai`, needs Node.js) with its free models, such as Big Pickle, DeepSeek Flash and GLM Flash, no sign-in needed. The free lineup changes from time to time; the office reads the current one with `opencode models opencode`. Running headless, OpenCode refuses anything it would ask permission for.
 - **Optional:** [Antigravity](https://antigravity.google), to see its IDE conversations in the office.
 
 Several agents working at once use those limits up faster.

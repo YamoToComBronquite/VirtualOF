@@ -8,12 +8,12 @@ Um escritório virtual em pixel art para os seus agentes de IA. Você passa tare
 
 ## O que ele faz
 
-- **Uma equipe com funções de verdade.** Seis mesas, uma função cada: um **supervisor** que planeja, um **UI/UX designer**, dois **fullstack**, um **tester** e um **revisor**. A equipe padrão se divide entre três contas (Claude, ChatGPT e Google), para um limite não parar todo mundo. Em **Ajustes** você muda a função, o apelido e o modelo de cada um (Claude: Opus, Sonnet ou Haiku; Codex: os modelos da sua configuração; Gemini: o que `agy models` lista) e a ordem das mesas.
+- **Uma equipe montada com as suas contas.** O escritório começa vazio. Em **Ajustes**, a parte **Contas** mostra quais contas estão logadas neste computador, com um botão para entrar (ou instalar) em cada uma pelo PowerShell embutido. Depois você ocupa até seis mesas: **Adicionar agente** coloca um por vez, e **Montar com minhas contas** monta a equipe inteira (supervisor, UI/UX designer, dois fullstack, tester e revisor), usando Claude e ChatGPT onde você tem login e IA grátis no resto. Em cada mesa você escolhe a IA (Claude, Codex, Gemini ou OpenCode), a função, o apelido e o modelo, e muda a ordem ou esvazia a mesa.
 - **Uma conversa, como em qualquer app de IA.** O painel da direita é um chat: suas mensagens, as respostas e o que os agentes estão fazendo sobem, e a caixa de mensagem fica embaixo. **Enter** manda, **Shift + Enter** pula linha. Enquanto algo roda, o botão de enviar vira um botão de parar.
 - **Fale com a equipe ou com um agente.** Em **Para**, escolha **Equipe** para um comando geral, ou um agente da lista. Clicar numa mesa também escolhe aquele agente, e a conversa passa a mostrar só ele.
 - **Um comando geral, a equipe inteira.** O supervisor monta os passos na melhor ordem, o escritório passa cada passo para o agente certo, e depois de cada passo o supervisor pode refazer o resto do plano (por exemplo, para corrigir o que o revisor apontou). O plano fica acima da caixa de mensagem, como uma lista ao vivo.
 - **A equipe à vista.** Uma aba à esquerda (abre e fecha pela lingueta) mostra cada agente com a função, o que está fazendo e uma barra de **estresse**: o quanto a conta dele está perto do limite. Embaixo, o **Consumo** mostra tarefas, quanto do limite foi usado e quanto falta.
-- **Troca automática no limite, com passagem de bastão.** Se uma conta bater o limite no meio de uma tarefa, um agente de outra conta assume, primeiro as contas gratuitas (Gemini). Quem assume recebe a tarefa original, o que o anterior já fez e onde parou, e continua dali em vez de começar de novo. Vale para o comando geral e para a conversa direta.
+- **Troca automática no limite, com passagem de bastão.** Se uma conta bater o limite no meio de uma tarefa, um agente de outra conta assume, primeiro as gratuitas (Gemini e OpenCode). Quem assume recebe a tarefa original, o que o anterior já fez e onde parou, e continua dali em vez de começar de novo. Vale para o comando geral e para a conversa direta.
 - **Skills para todos.** A janela **Skills** mostra uma lista só, para a equipe inteira. Importar uma skill instala para o Claude, o Codex e o Gemini, então todo agente, inclusive quem entrar depois, recebe. **Passar para todos** copia as skills que só alguns agentes têm. Importe só skills de quem você confia: elas podem trazer scripts que os agentes executam.
 - **Sua configuração vai junto.** Os agentes Claude carregam as mesmas skills, plugins, servidores MCP e CLAUDE.md do seu Claude Code; o Codex usa a configuração dele em `~/.codex`. Os detalhes de cada agente mostram o que ele carregou.
 - **PowerShell embutido.** Um terminal de verdade na parte de baixo da janela (botão **Terminal** ou Ctrl + '), aberto na pasta do projeto.
@@ -24,7 +24,7 @@ Um escritório virtual em pixel art para os seus agentes de IA. Você passa tare
 - **Acompanha o Antigravity.** As conversas do IDE Antigravity aparecem como personagens que se acendem quando estão trabalhando (só acompanhamento), quando há mesa livre.
 - **Status ao vivo em cada mesa.** A tela, o balão e a luminária mostram se o agente está pensando, lendo, escrevendo, rodando comando, esperando você, terminou ou deu erro. Com a janela em segundo plano, chegam notificações do sistema.
 
-O Claude roda pelo [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk), o Codex pelo [Codex SDK](https://github.com/openai/codex/tree/main/sdk/typescript) e o Gemini pelo [Antigravity CLI](https://antigravity.google/docs/cli/headless/) (`agy`) em modo headless.
+O Claude roda pelo [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk), o Codex pelo [Codex SDK](https://github.com/openai/codex/tree/main/sdk/typescript) o Gemini pelo [Antigravity CLI](https://antigravity.google/docs/cli/headless/) (`agy`) e os modelos grátis pelo [OpenCode](https://opencode.ai/docs/cli/) (`opencode run`), os dois em modo headless.
 
 ## Primeiros passos
 
@@ -55,11 +55,12 @@ Para lançar uma versão nova: aumente a `version` no `package.json` e rode `npm
 
 ### Contas
 
-Cada pessoa usa as próprias assinaturas, e os agentes gastam os limites de sempre:
+Cada pessoa usa as próprias assinaturas, e os agentes gastam os limites de sempre. Ninguém precisa ter todas: a parte **Contas** em Ajustes mostra o que este computador tem, e as mesas sem conta podem ficar com IA grátis.
 
 - **Claude:** uma conta logada no Claude Code neste computador (CLI ou extensão da IDE), ou uma `ANTHROPIC_API_KEY`.
 - **Codex:** uma conta do ChatGPT. Se faltar o login, o escritório mostra o comando no cartão **Precisa do terminal**, pronto para rodar no PowerShell embutido.
 - **Gemini:** o [Antigravity CLI](https://antigravity.google/docs/getting-started) (`agy`), logado com sua conta do Google (rode `agy` uma vez no PowerShell embutido; o login é separado do IDE). Se faltar, o escritório mostra o comando de instalação.
+- **OpenCode (grátis):** o [OpenCode](https://opencode.ai) (`npm install -g opencode-ai`, precisa do Node.js) com os modelos grátis dele, como Big Pickle, DeepSeek Flash e GLM Flash, sem login. A lista de modelos grátis muda de tempos em tempos; o escritório pega a atual com `opencode models opencode`. Rodando sem tela, o OpenCode recusa tudo o que pediria permissão para fazer.
 - **Opcional:** o [Antigravity](https://antigravity.google), para ver as conversas do IDE no escritório.
 
 Vários agentes trabalhando ao mesmo tempo gastam esses limites mais rápido.

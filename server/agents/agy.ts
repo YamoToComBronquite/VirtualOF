@@ -7,7 +7,7 @@ import { clip } from './describe.ts';
 import type { AgentStatus } from '../../shared/types.ts';
 import type { RoleBrief, RunOutcome, Runner } from './runner.ts';
 
-const INSTALL_COMMAND = 'irm https://antigravity.google/cli/install.ps1 | iex';
+export const AGY_INSTALL = 'irm https://antigravity.google/cli/install.ps1 | iex';
 const LIMIT = /quota|rate.?limit|resource.?exhausted|\b429\b|usage limit|exhausted/i;
 
 /** Where the official installer puts agy on Windows; elsewhere we rely on PATH. */
@@ -131,7 +131,7 @@ export class AgyAgent implements Runner {
       child.on('error', (error: NodeJS.ErrnoException) => {
         if (error.code === 'ENOENT') {
           this.fail('O Antigravity CLI (agy) não está instalado neste computador.');
-          this.office.needTerminal(id, INSTALL_COMMAND, 'O Gemini roda pelo Antigravity CLI (agy), que ainda não está instalado. É o instalador oficial do Google.');
+          this.office.needTerminal(id, AGY_INSTALL,'O Gemini roda pelo Antigravity CLI (agy), que ainda não está instalado. É o instalador oficial do Google.');
         } else {
           this.fail(error.message);
         }

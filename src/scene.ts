@@ -136,6 +136,19 @@ interface Look {
 
 const looks = new Map<string, Look>();
 
+export type StressLevel = 'calmo' | 'apertado' | 'esgotado' | 'sem-dados';
+
+export interface Stress {
+  level: StressLevel;
+  /** 0..1 for the bar; when the account gives no percentage it only reflects the level. */
+  value: number;
+}
+
+/** Bar colour for a stress value: green, then yellow, then red. */
+export function stressColor(value: number) {
+  return value >= 0.9 ? '#e0574b' : value >= 0.6 ? '#f2c14e' : '#6cc46a';
+}
+
 /** Skin, hair and hairstyle come from the agent id, so a character looks the same everywhere. */
 function lookFor(agent: AgentView): Look {
   let look = looks.get(agent.id);
@@ -195,6 +208,8 @@ export class Scene {
   private offsetY = 0;
   agents: AgentView[] = [];
   selectedId?: string;
+  /** How close each agent's account is to its limit; drives the bar, sweat and steam. */
+  stress = new Map<string, Stress>();
   doneCount = 0;
   /** When each agent last finished, so the check mark shows for a few seconds. */
   private finishedAt = new Map<string, number>();
@@ -438,7 +453,51 @@ export class Scene {
     if (agent) this.hands(cx, top, agent, time);
     this.monitor(cx + 20, top - 20, agent?.status ?? 'idle', time);
 
-    if (agent) this.bubble(cx, top - 42, agent, time);
+    if (agent) {
+      this.strain(cx, top, agent, time);
+      if (selected) this.stressBar(cx, top - 31, agent);
+      this.bubble(cx, top - 42, agent, time);
+    }
+  }
+
+  /** Sweat when the account is close to its limit, steam once it ran out. */
+  private strain(cx: number, top: number, agent: AgentView, time: number) {
+    const stress = this.stress.get(agent.id);
+    if (!stress || (stress.level !== 'apertado' && stress.level !== 'esgotado')) return;
+    const head = top - 22;
+    // A teardrop that slides down beside the forehead and starts over
+    const drop = Math.floor(time / 150) % 6;
+    const dx = cx + 9;
+    const dy = head + 1 + drop;
+    this.rect(dx + 1, dy, 1, 1, '#2b5f86');
+    this.rect(dx, dy + 1, 3, 3, '#2b5f86');
+    this.rect(dx + 1, dy + 1, 1, 1, '#bfe6ff');
+    this.rect(dx + 1, dy + 2, 1, 1, '#7cc4f0');
+    if (stress.level === 'esgotado') {
+      // Steam rising from both ears, clear of the speech bubble above the head
+      const step = Math.floor(time / 220) % 4;
+      for (const side of [-1, 1]) {
+        for (let i = 0; i < 3; i++) {
+          const rise = (step + i) % 4;
+          const px = cx + side * (11 + rise) - (side < 0 ? 4 : 0);
+          const py = head + 4 - rise * 4;
+          this.rect(px, py, 4, 3, `rgba(232, 232, 240, ${0.85 - rise * 0.2})`);
+          this.rect(px + 1, py - 1, 2, 1, `rgba(232, 232, 240, ${0.6 - rise * 0.15})`);
+        }
+      }
+    }
+  }
+
+  /** Small segmented bar over the selected agent's head. */
+  private stressBar(cx: number, y: number, agent: AgentView) {
+    const stress = this.stress.get(agent.id);
+    if (!stress) return;
+    const segments = 7; // 2 px blocks with 1 px gaps fill the 20 px inside the frame
+    const lit = stress.level === 'sem-dados' ? 0 : Math.max(1, Math.round(stress.value * segments));
+    this.box(cx - 11, y, 22, 5, '#1d1830');
+    for (let i = 0; i < segments; i++) {
+      this.rect(cx - 10 + i * 3, y + 1, 2, 3, i < lit ? stressColor((i + 1) / segments) : '#3a3150');
+    }
   }
 
   private person(cx: number, top: number, agent: AgentView, time: number) {

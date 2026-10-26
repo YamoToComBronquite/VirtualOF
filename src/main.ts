@@ -13,7 +13,7 @@ import {
   type ServerMessage,
   type TerminalAlert,
 } from '../shared/types.ts';
-import { DESKS, Scene, paintCharacter } from './scene.ts';
+import { DESKS, Scene, paintCharacter, stressColor, type Stress } from './scene.ts';
 
 const STATUS_TEXT: Record<AgentStatus, string> = {
   idle: 'livre',
@@ -176,6 +176,7 @@ function receive(msg: ServerMessage) {
       state.quota = msg.quota;
       renderUsage();
       renderTeam();
+      renderDesk();
       break;
     case 'auto-switch':
       state.autoSwitch = msg.enabled;
@@ -219,9 +220,77 @@ function renderAll() {
   renderLog();
 }
 
+/**
+ * An agent's "stress" is how close its account is to the subscription limit. Only Claude
+ * gives a percentage (and only once usage is high), so otherwise the bar follows the level.
+ */
+function stressFor(agent: AgentView): Stress | undefined {
+  const account = accountOf(agent);
+  if (!account) return undefined;
+  const quota = state.quota[account];
+  if (quota.status === 'limited') return { level: 'esgotado', value: 1 };
+  if (quota.utilization !== undefined) {
+    const value = Math.min(1, quota.utilization);
+    return { level: quota.status === 'warning' || value >= 0.75 ? 'apertado' : 'calmo', value };
+  }
+  if (quota.status === 'warning') return { level: 'apertado', value: 0.8 };
+  if (quota.status === 'ok') return { level: 'calmo', value: 0.15 };
+  return { level: 'sem-dados', value: 0 };
+}
+
+const STRESS_TEXT: Record<Stress['level'], string> = {
+  calmo: 'Tranquilo',
+  apertado: 'Apertado',
+  esgotado: 'Esgotado',
+  'sem-dados': 'Sem dados',
+};
+
+function renderStress(agent: AgentView) {
+  const box = $('stress');
+  const stress = stressFor(agent);
+  box.hidden = !stress;
+  if (!stress) return;
+  const account = accountOf(agent)!;
+  const quota = state.quota[account];
+  const exact = quota.utilization !== undefined && stress.level !== 'esgotado';
+  const percent = Math.round(stress.value * 100);
+
+  const label = $('stress-label');
+  label.textContent = exact ? `${STRESS_TEXT[stress.level]} · ${percent}%` : STRESS_TEXT[stress.level];
+  label.dataset.level = stress.level;
+
+  // Ten pixel blocks, each coloured by where it sits on the scale
+  const bar = $('stress-bar');
+  const lit = stress.level === 'sem-dados' ? 0 : Math.max(1, Math.round(stress.value * 10));
+  bar.replaceChildren(
+    ...Array.from({ length: 10 }, (_, i) => {
+      const block = el('span');
+      if (i < lit) block.style.background = stressColor((i + 1) / 10);
+      return block;
+    }),
+  );
+  bar.setAttribute('aria-valuenow', String(exact ? percent : lit * 10));
+  bar.setAttribute('aria-label', `Estresse de ${agent.name}: ${label.textContent}`);
+
+  const parts: string[] = [ACCOUNT_NAMES[account]];
+  if (quota.window) parts.push(`limite de ${quota.window}`);
+  if (quota.resetsAt) parts.push(`${quota.status === 'limited' ? 'volta' : 'renova'} ${clock(quota.resetsAt)}`);
+  const sharing = state.agents.filter((a) => a.id !== agent.id && accountOf(a) === account).map((a) => a.name);
+  let detail = parts.join(' · ') + '.';
+  if (sharing.length) detail += ` Divide esse limite com ${sharing.join(', ')}.`;
+  if (!exact && stress.level !== 'esgotado') {
+    detail +=
+      account === 'claude'
+        ? ' O Claude só informa a porcentagem quando o uso fica alto.'
+        : ' O Codex só avisa quando bate o limite.';
+  }
+  $('stress-detail').textContent = detail;
+}
+
 function renderTeam() {
   scene.agents = state.agents.slice(0, DESKS.length);
   scene.selectedId = state.selectedId;
+  scene.stress = new Map(state.agents.flatMap((a) => (stressFor(a) ? [[a.id, stressFor(a)!] as const] : [])));
   $('team').replaceChildren(
     ...state.agents.map((agent) => {
       const li = el('li');
@@ -257,6 +326,7 @@ function renderDesk() {
   desk.hidden = !agent;
   if (!agent) return;
   $('desk-name').textContent = `Falar com ${agent.name}`;
+  renderStress(agent);
   const tokens = agent.usage.inputTokens + agent.usage.outputTokens;
   $('desk-activity').textContent =
     tokens > 0

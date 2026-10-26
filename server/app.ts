@@ -1,0 +1,194 @@
+import { createReadStream, existsSync, mkdirSync, statSync } from 'node:fs';
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { homedir } from 'node:os';
+import { extname, isAbsolute, join, normalize, resolve, sep } from 'node:path';
+import { WebSocketServer, type WebSocket } from 'ws';
+import type { ClientMessage, ServerMessage } from '../shared/types.ts';
+import { watchAntigravity } from './agents/antigravity.ts';
+import { loadConfig, saveProject } from './config.ts';
+import { loadModels } from './models.ts';
+import { Office } from './office.ts';
+import { Orchestrator } from './orchestrator.ts';
+import { importSkill, listSkills, SKILL_DIRS } from './skills.ts';
+import { Team } from './team.ts';
+
+const HOST = '127.0.0.1';
+
+export interface OfficeOptions {
+  /** 0 picks any free port (the desktop app); omitted uses the one in escritorio.config.json. */
+  port?: number;
+  /** 'dev' serves the page through Vite; a folder serves the built page (the desktop app). */
+  web: 'dev' | { dir: string };
+  /** Project root, for Vite in dev mode. */
+  root?: string;
+}
+
+/** Where agents work when no project is open: an empty folder of their own. */
+const LOBBY = join(homedir(), '.virtualof', 'sala');
+const LOBBY_NOTE =
+  '[Aviso do escritório: o usuário ainda não abriu nenhum projeto. Você está numa pasta vazia, só para conversar ' +
+  'e mostrar que está funcionando. Responda normalmente, mas não crie, altere nem apague arquivos.]';
+
+const TYPES: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.ico': 'image/x-icon',
+  '.json': 'application/json',
+  '.woff2': 'font/woff2',
+};
+
+/** Serves the built page; unknown paths fall back to index.html. Never leaves `dir`. */
+function serveStatic(dir: string) {
+  const base = resolve(dir);
+  return (req: IncomingMessage, res: ServerResponse) => {
+    const path = decodeURIComponent((req.url ?? '/').split('?')[0]);
+    let file = normalize(join(base, path));
+    if (!file.startsWith(base + sep) && file !== base) {
+      res.writeHead(403).end();
+      return;
+    }
+    if (!existsSync(file) || statSync(file).isDirectory()) file = join(base, 'index.html');
+    res.writeHead(200, { 'Content-Type': TYPES[extname(file)] ?? 'application/octet-stream' });
+    createReadStream(file).pipe(res);
+  };
+}
+
+function isFolder(path: string) {
+  return isAbsolute(path) && existsSync(path) && statSync(path).isDirectory();
+}
+
+export async function startOffice(options: OfficeOptions) {
+  const config = loadConfig();
+  const office = new Office(config.projeto);
+  office.autoSwitch = config.trocaAutomatica ?? true;
+  office.models = await loadModels((models) => office.setModels(models));
+  const team = new Team(config, office);
+  const orchestrator = new Orchestrator(office, team);
+  const stopWatching = watchAntigravity(config.antigravity, office);
+  mkdirSync(LOBBY, { recursive: true });
+
+  function handle(msg: ClientMessage) {
+    switch (msg.type) {
+      case 'task': {
+        const member = team.get(msg.agentId);
+        const runner = member?.runner;
+        const prompt = msg.prompt.trim();
+        if (!member || !runner || !prompt) return;
+        if (office.isLimited(team.account(member))) {
+          const cover = team.substitute(member);
+          return office.notice(
+            `${team.label(member)} está sem limite de uso agora (veja em Consumo).` + (cover ? ` ${team.label(cover)} está livre para essa tarefa.` : ''),
+          );
+        }
+        if (orchestrator.running) return office.notice('Tem um comando geral em andamento. Pare o plano para falar direto com um agente.');
+        if (runner.busy) return office.notice('Esse agente ainda está numa tarefa. Espere terminar ou clique em Parar.');
+        if (isFolder(office.project)) {
+          void runner.run(prompt, office.project);
+        } else {
+          // No project yet: chat from an empty folder, just to see the agent respond and its status.
+          void runner.run(prompt, LOBBY, LOBBY_NOTE);
+        }
+        return;
+      }
+      case 'stop':
+        team.get(msg.agentId)?.runner.stop();
+        return;
+      case 'command': {
+        const prompt = msg.prompt.trim();
+        if (!prompt) return;
+        if (!isFolder(office.project)) return office.notice('Escolha a pasta do projeto antes de mandar um comando.');
+        void orchestrator.start(prompt, office.project);
+        return;
+      }
+      case 'stop-plan':
+        orchestrator.stop();
+        return;
+      case 'list-skills':
+        office.publish({ type: 'skills', skills: listSkills() });
+        return;
+      case 'import-skill': {
+        const targets = msg.targets.filter((t) => t in SKILL_DIRS);
+        const result = importSkill(msg.files, targets);
+        office.publish({ type: 'skill-imported', ...result });
+        if (result.ok) office.publish({ type: 'skills', skills: listSkills() });
+        return;
+      }
+      case 'team': {
+        if (orchestrator.running) return office.notice('Pare o comando geral antes de mudar a equipe.');
+        const error = team.apply(msg.team, msg.autoSwitch !== false);
+        office.notice(error ?? 'Equipe atualizada.');
+        return;
+      }
+      case 'permission':
+        office.answerPermission(msg.id, msg.allow);
+        return;
+      case 'terminal-done':
+        office.clearTerminal(msg.id);
+        return;
+      case 'project': {
+        const path = resolve(msg.path.trim());
+        if (!isFolder(path)) return office.notice(`Essa pasta não existe: ${msg.path}`);
+        office.setProject(path);
+        saveProject(path);
+        return;
+      }
+    }
+  }
+
+  const server = createServer();
+  if (options.web === 'dev') {
+    // Vite is a development tool; the desktop app never loads it.
+    const { createServer: createVite } = await import('vite');
+    const vite = await createVite({ root: options.root, appType: 'spa', server: { middlewareMode: true, hmr: { server } } });
+    server.on('request', (req, res) => vite.middlewares(req, res));
+  } else {
+    server.on('request', serveStatic(options.web.dir));
+  }
+
+  // The agents can run commands on this machine, so only the office page itself may connect:
+  // any other site open in the browser could otherwise reach a localhost socket.
+  const allowedOrigins = new Set<string>();
+  const wss = new WebSocketServer({ noServer: true });
+  server.on('upgrade', (req, socket, head) => {
+    if (req.url !== '/ws') return; // Vite's HMR socket handles its own upgrades.
+    if (!allowedOrigins.has(req.headers.origin ?? '')) {
+      socket.destroy();
+      return;
+    }
+    wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws));
+  });
+
+  wss.on('connection', (ws: WebSocket) => {
+    const send = (msg: ServerMessage) => ws.send(JSON.stringify(msg));
+    send(office.snapshot());
+    const unsubscribe = office.subscribe(send);
+    ws.on('message', (data) => {
+      try {
+        handle(JSON.parse(String(data)) as ClientMessage);
+      } catch {
+        // Ignore malformed messages; the page only sends well-formed ones.
+      }
+    });
+    ws.on('close', unsubscribe);
+  });
+
+  await new Promise<void>((done) => server.listen(options.port ?? config.porta, HOST, done));
+  const port = (server.address() as AddressInfo).port;
+  allowedOrigins.add(`http://localhost:${port}`).add(`http://${HOST}:${port}`);
+
+  return {
+    url: `http://localhost:${port}`,
+    /** Stops every agent and closes the server, e.g. when the app window closes. */
+    shutdown() {
+      orchestrator.stop();
+      for (const member of team.list()) member.runner.stop();
+      stopWatching();
+      wss.close();
+      server.close();
+    },
+  };
+}

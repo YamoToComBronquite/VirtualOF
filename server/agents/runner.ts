@@ -11,7 +11,8 @@ export interface RunOutcome {
 /** What every controllable agent offers the office, whatever SDK drives it. */
 export interface Runner {
   readonly busy: boolean;
-  run(prompt: string, cwd: string): Promise<RunOutcome>;
+  /** `note` reaches the agent after the prompt but stays out of the office log. */
+  run(prompt: string, cwd: string, note?: string): Promise<RunOutcome>;
   stop(): void;
   /** Forgets the conversation, e.g. after the agent changes role. */
   reset(): void;

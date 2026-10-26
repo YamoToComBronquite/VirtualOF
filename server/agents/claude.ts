@@ -40,7 +40,7 @@ export class ClaudeAgent implements Runner {
     this.sessionCost = 0;
   }
 
-  async run(prompt: string, cwd: string): Promise<RunOutcome> {
+  async run(prompt: string, cwd: string, note?: string): Promise<RunOutcome> {
     const { id } = this;
     // A session belongs to one folder; switching projects starts a fresh conversation.
     if (this.sessionCwd !== cwd) this.reset();
@@ -52,7 +52,7 @@ export class ClaudeAgent implements Runner {
 
     try {
       const run = query({
-        prompt,
+        prompt: note ? `${prompt}\n\n${note}` : prompt,
         options: {
           cwd,
           resume: this.sessionId,

@@ -3,6 +3,8 @@ import {
   type Account,
   type ModelCatalog,
   type Quota,
+  type SkillCatalog,
+  type SkillFile,
   type AgentStatus,
   type AgentView,
   type ClientMessage,
@@ -183,6 +185,21 @@ function receive(msg: ServerMessage) {
       renderTeam();
       renderDesk();
       break;
+    case 'skills':
+      renderSkills(msg.skills);
+      break;
+    case 'skill-imported': {
+      const result = $('skill-result');
+      result.textContent = msg.message;
+      result.dataset.ok = String(msg.ok);
+      result.hidden = false;
+      $<HTMLButtonElement>('skill-import').disabled = false;
+      if (msg.ok) {
+        pendingSkill = null;
+        $('skill-preview').hidden = true;
+      }
+      break;
+    }
     case 'models':
       state.models = msg.models;
       if ($<HTMLDialogElement>('settings').open) renderSettings();
@@ -748,6 +765,101 @@ $('settings').addEventListener('close', () => {
       autoSwitch: $<HTMLInputElement>('auto-switch').checked,
     });
   }
+});
+
+/* ---------- Skills: see what is installed and import new ones ---------- */
+
+const SKILL_OWNERS: Record<Account, string> = { claude: 'Claude', codex: 'Codex', antigravity: 'Gemini' };
+const SKILL_LIMIT_BYTES = 10 * 1024 * 1024;
+let pendingSkill: SkillFile[] | null = null;
+
+function renderSkills(skills: SkillCatalog) {
+  $('skills-installed').replaceChildren(
+    ...(Object.keys(SKILL_OWNERS) as Account[]).map((account) => {
+      const group = el('section', 'skills__group');
+      group.append(el('h3', 'skills__owner', `${SKILL_OWNERS[account]} · ${skills[account].length}`));
+      const list = el('ul', 'skills__list');
+      if (!skills[account].length) list.append(el('li', 'hint', 'Nenhuma skill sua ainda.'));
+      for (const skill of skills[account]) {
+        const item = el('li', 'skills__chip', skill.name);
+        item.title = skill.description;
+        list.append(item);
+      }
+      group.append(list);
+      return group;
+    }),
+  );
+}
+
+/** Same frontmatter reading as the server, for the preview before importing. */
+function skillMeta(text: string) {
+  const block = text.match(/^---\r?\n([\s\S]*?)\r?\n---/)?.[1] ?? '';
+  const field = (key: string) => block.match(new RegExp(`^${key}:\\s*(.+)$`, 'm'))?.[1].trim().replace(/^(['"])(.*)\1$/, '$2');
+  return { name: field('name'), description: field('description') };
+}
+
+function toBase64(buffer: ArrayBuffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(binary);
+}
+
+/** Turns the picked files into paths relative to the skill folder, skipping git and OS clutter. */
+async function readSkill(files: FileList, fromFolder: boolean) {
+  const picked = [...files].filter((file) => {
+    const path = fromFolder ? file.webkitRelativePath : file.name;
+    return !/(^|\/)(\.git|node_modules)(\/|$)|(^|\/)(\.DS_Store|Thumbs\.db)$/.test(path);
+  });
+  const size = picked.reduce((sum, f) => sum + f.size, 0);
+  if (size > SKILL_LIMIT_BYTES) throw new Error('A skill passa de 10 MB. Tire arquivos grandes que ela não precisa.');
+  return Promise.all(
+    picked.map(async (file) => ({
+      // A picked folder comes as "nome-da-pasta/..."; the skill's own files start after it.
+      path: fromFolder ? file.webkitRelativePath.split('/').slice(1).join('/') : 'SKILL.md',
+      base64: toBase64(await file.arrayBuffer()),
+    })),
+  );
+}
+
+async function pickSkill(input: HTMLInputElement, fromFolder: boolean) {
+  const result = $('skill-result');
+  result.hidden = true;
+  if (!input.files?.length) return;
+  try {
+    const files = await readSkill(input.files, fromFolder);
+    const main = files.find((f) => f.path === 'SKILL.md');
+    if (!main) throw new Error('Essa pasta não tem um SKILL.md na raiz. Escolha a pasta da skill em si.');
+    const text = new TextDecoder().decode(Uint8Array.from(atob(main.base64), (c) => c.charCodeAt(0)));
+    const meta = skillMeta(text);
+    pendingSkill = files;
+    $('skill-summary').textContent = meta.name
+      ? `${meta.name} · ${files.length} ${files.length === 1 ? 'arquivo' : 'arquivos'}${meta.description ? ` · ${meta.description}` : ''}`
+      : 'Esse SKILL.md não tem "name:" no topo; o escritório vai recusar.';
+    $('skill-text').textContent = text.slice(0, 1500) + (text.length > 1500 ? '\n…' : '');
+    $('skill-preview').hidden = false;
+  } catch (error) {
+    pendingSkill = null;
+    $('skill-preview').hidden = true;
+    result.textContent = error instanceof Error ? error.message : String(error);
+    result.dataset.ok = 'false';
+    result.hidden = false;
+  } finally {
+    input.value = '';
+  }
+}
+
+$('open-skills').addEventListener('click', () => {
+  send({ type: 'list-skills' });
+  $<HTMLDialogElement>('skills').showModal();
+});
+$('skill-folder').addEventListener('change', (e) => void pickSkill(e.target as HTMLInputElement, true));
+$('skill-file').addEventListener('change', (e) => void pickSkill(e.target as HTMLInputElement, false));
+$('skill-import').addEventListener('click', () => {
+  if (!pendingSkill) return;
+  const targets = [...document.querySelectorAll<HTMLInputElement>('.skills__targets input:checked')].map((i) => i.value as Account);
+  send({ type: 'import-skill', files: pendingSkill, targets });
+  $<HTMLButtonElement>('skill-import').disabled = true;
 });
 
 /* ---------- Actions ---------- */

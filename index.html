@@ -22,6 +22,7 @@
       <header class="panel__head">
         <h1>Turno da Noite</h1>
         <span id="connection" class="connection">conectando…</span>
+        <button type="button" id="open-skills" class="ghost small">Skills</button>
         <button type="button" id="open-settings" class="ghost small">Configurações</button>
       </header>
 
@@ -138,6 +139,48 @@
         <div class="settings__actions">
           <button type="submit" value="save">Salvar equipe</button>
           <button type="submit" value="cancel" class="ghost" formnovalidate>Cancelar</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="skills" class="settings" aria-labelledby="skills-title">
+      <form method="dialog">
+        <h2 id="skills-title">Skills</h2>
+        <p class="hint">
+          Uma skill ensina os agentes a fazer algo específico. É uma pasta com um arquivo SKILL.md e, às vezes, scripts.
+        </p>
+        <div id="skills-installed" class="skills__installed"></div>
+
+        <h3 class="skills__heading">Importar skill</h3>
+        <div class="skills__pick">
+          <label class="pick">
+            <input type="file" id="skill-folder" webkitdirectory multiple class="visually-hidden" />
+            <span>Escolher pasta da skill</span>
+          </label>
+          <label class="pick pick--ghost">
+            <input type="file" id="skill-file" accept=".md" class="visually-hidden" />
+            <span>Só o SKILL.md</span>
+          </label>
+        </div>
+
+        <div id="skill-preview" class="skills__preview" hidden>
+          <p id="skill-summary" class="skills__summary"></p>
+          <pre id="skill-text" class="skills__text"></pre>
+          <p class="member__warn">
+            Skills podem trazer scripts que os agentes executam no seu computador. Importe só skills de quem você confia.
+          </p>
+          <fieldset class="skills__targets">
+            <legend>Instalar para</legend>
+            <label><input type="checkbox" value="claude" checked /> Claude</label>
+            <label><input type="checkbox" value="codex" checked /> Codex</label>
+            <label><input type="checkbox" value="antigravity" checked /> Gemini</label>
+          </fieldset>
+          <button type="button" id="skill-import">Importar skill</button>
+        </div>
+        <p id="skill-result" class="skills__result" hidden></p>
+
+        <div class="settings__actions">
+          <button type="submit" value="close" class="ghost">Fechar</button>
         </div>
       </form>
     </dialog>

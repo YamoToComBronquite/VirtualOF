@@ -171,6 +171,11 @@ export class Office {
     this.emit({ type: 'notice', text });
   }
 
+  /** Sends a message that isn't office state (e.g. a skills listing) to every open page. */
+  publish(msg: ServerMessage) {
+    this.emit(msg);
+  }
+
   /** Raises an "open the terminal" card for something only the user can do. */
   needTerminal(agentId: string, command: string, reason: string) {
     const alert: TerminalAlert = { id: randomUUID(), agentId, command, reason };

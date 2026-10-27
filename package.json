@@ -43,7 +43,7 @@
     "vite": "^8.3.5"
   },
   "main": "electron/main.mjs",
-  "author": "caio306santana",
+  "author": "Yamo",
   "build": {
     "appId": "io.github.yamotocombronquite.virtualof",
     "productName": "VirtualOF",

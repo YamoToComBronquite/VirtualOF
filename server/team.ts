@@ -105,10 +105,16 @@ export class Team {
   /**
    * Someone on another account who can cover for `member`: same role first, then anyone on
    * the team, then whoever is off duty. Null when every other account is over its limit too.
+   * `taken` lists agents already committed elsewhere (e.g. on another step of the same plan).
    */
-  substitute(member: Member): Member | null {
+  substitute(member: Member, taken: ReadonlySet<string> = new Set()): Member | null {
     const free = this.members.filter(
-      (m) => m !== member && !m.runner.busy && this.account(m) !== this.account(member) && !this.office.isLimited(this.account(m)),
+      (m) =>
+        m !== member &&
+        !m.runner.busy &&
+        !taken.has(m.config.id) &&
+        this.account(m) !== this.account(member) &&
+        !this.office.isLimited(this.account(m)),
     );
     // Free accounts cover first, so a limit does not start spending on another paid plan.
     const cost = (m: Member) => (FREE_ACCOUNTS.includes(this.account(m)) ? 0 : 1);

@@ -3,14 +3,14 @@ import { WebSocket } from 'ws';
 import type { ClientMessage, ServerMessage } from '../shared/types.ts';
 import type { Office } from '../server/office.ts';
 
-const state = vi.hoisted(() => ({ run: vi.fn(), cleanup: vi.fn(), save: vi.fn(), office: undefined as Office | undefined }));
+const state = vi.hoisted(() => ({ run: vi.fn(), cleanup: vi.fn(), save: vi.fn(), office: undefined as Office | undefined, team: undefined as undefined | { members: { runner: { busy: boolean } }[] } }));
 vi.mock('node:fs', async (original) => ({ ...await original<typeof import('node:fs')>(), mkdirSync: vi.fn() }));
 vi.mock('../server/config.ts', () => ({
   loadConfig: () => ({ projeto: process.cwd(), antigravity: {}, porta: 0 }),
   saveLanguage: vi.fn(), savePermissionMode: vi.fn(), saveProject: vi.fn(),
 }));
 vi.mock('../server/accounts.ts', () => ({ detectAccounts: () => ({}) }));
-vi.mock('../server/models.ts', () => ({ loadModels: async () => ({}) }));
+vi.mock('../server/models.ts', () => ({ loadModels: async () => ({}), agyModels: async () => [] }));
 vi.mock('../server/agents/antigravity.ts', () => ({ watchAntigravity: () => () => {} }));
 vi.mock('../server/shell.ts', () => ({ Shell: class { running = false; close() {} } }));
 vi.mock('../server/team.ts', () => ({
@@ -21,6 +21,7 @@ vi.mock('../server/team.ts', () => ({
     ];
     constructor(_config: unknown, office: Office) {
       state.office = office;
+      state.team = this;
       for (const { config } of this.members) office.addAgent({
         id: config.id, name: config.nome, defaultName: config.nome, kind: 'claude', role: config.papel,
         status: 'idle', activity: '', color: '#fff', controllable: true, usage: { tasks: 0, inputTokens: 0, outputTokens: 0 },
@@ -189,5 +190,49 @@ describe('submission acknowledgements over WebSocket', () => {
       ] }),
     })));
     expect(state.office!.getAgent('worker')?.status).toBe('error');
+  });
+});
+
+describe('message queue while busy', () => {
+  it('queues a task for a busy agent and runs it, in order, when the agent is free', async () => {
+    let finish!: () => void;
+    const worker = state.team!.members[1].runner;
+    state.run.mockImplementation(async (prompt: string) => {
+      worker.busy = true;
+      if (prompt === 'primeira') await new Promise<void>((done) => (finish = done));
+      worker.busy = false;
+      return { ok: true, text: prompt };
+    });
+    const client = await connect();
+    client.send({ type: 'task', agentId: 'worker', prompt: 'primeira', requestId: 'q1' });
+    await vi.waitFor(() => expect(state.run).toHaveBeenCalledTimes(1));
+    client.send({ type: 'task', agentId: 'worker', prompt: 'segunda', requestId: 'q2' });
+    await vi.waitFor(() => expect(client.messages).toContainEqual(expect.objectContaining({ type: 'submission', requestId: 'q2', accepted: true })));
+    expect(client.messages).toContainEqual(expect.objectContaining({ type: 'notice', text: expect.stringContaining('Na fila') }));
+    expect(state.run).toHaveBeenCalledTimes(1);
+    finish();
+    await vi.waitFor(() => expect(state.run).toHaveBeenCalledTimes(2));
+    expect(state.run.mock.calls[1][0]).toBe('segunda');
+  });
+
+  it('drops queued work when the user stops that agent', async () => {
+    let finish!: () => void;
+    const worker = state.team!.members[1].runner;
+    state.run.mockImplementation(async () => {
+      worker.busy = true;
+      await new Promise<void>((done) => (finish = done));
+      worker.busy = false;
+      return { ok: true, text: 'ok' };
+    });
+    const client = await connect();
+    client.send({ type: 'task', agentId: 'worker', prompt: 'primeira', requestId: 'r1' });
+    await vi.waitFor(() => expect(state.run).toHaveBeenCalledTimes(1));
+    client.send({ type: 'task', agentId: 'worker', prompt: 'segunda', requestId: 'r2' });
+    await vi.waitFor(() => expect(client.messages).toContainEqual(expect.objectContaining({ type: 'submission', requestId: 'r2', accepted: true })));
+    client.send({ type: 'stop', agentId: 'worker' });
+    await vi.waitFor(() => expect(client.messages).toContainEqual(expect.objectContaining({ type: 'log', entry: expect.objectContaining({ text: expect.stringContaining('Tirado da fila') }) })));
+    finish();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(state.run).toHaveBeenCalledTimes(1);
   });
 });

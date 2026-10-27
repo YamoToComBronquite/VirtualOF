@@ -709,10 +709,10 @@ function renderCommand() {
       : 'Escolha um coordenador em Ajustes.';
     commandField.placeholder = 'O que a equipe deve fazer?';
   }
-  // Like a chat app: while something runs, the send button turns into a stop button.
-  $('send-command').hidden = busy;
+  // While something runs, Stop shows up next to Send: new messages wait in line and run after it.
   $<HTMLButtonElement>('send-command').disabled = !agent && !coordinator;
   $('stop-plan').hidden = !busy;
+  if (busy) $('command-hint').textContent = 'Pode mandar mais: a mensagem entra na fila e roda quando terminar.';
   updateIdeas();
 
   const box = $('plan');
@@ -736,6 +736,7 @@ function renderCommand() {
       const agent = agentById(step.agentId);
       const li = el('li', 'step');
       li.dataset.status = step.status;
+      li.dataset.n = String(step.id); // the coordinator's numbering, which "depois de" refers to
       const who = el('span', 'step__who', agent?.name ?? step.agentId);
       who.style.color = agent?.color ?? '';
       // Coordinators write long, self-contained tasks; show two lines and open on click.
@@ -746,7 +747,8 @@ function renderCommand() {
         task.classList.toggle('is-open');
         if (!openSteps.delete(step.id)) openSteps.add(step.id);
       });
-      li.append(who, el('span', 'step__state', STEP_TEXT[step.status]), task);
+      const after = step.status === 'pending' && step.dependsOn?.length ? ` · depois de ${step.dependsOn.map((n) => `#${n}`).join(', ')}` : '';
+      li.append(who, el('span', 'step__state', STEP_TEXT[step.status] + after), task);
       return li;
     }),
   );
@@ -970,7 +972,8 @@ const DRAFT_COLORS = ['#e3a04f', '#4fb3a5', '#d9705a', '#5fbf8f', '#6f8cf0', '#c
 
 /** A paid account counts only once this machine has its login; free ones always do. */
 function hasAccount(kind: AgentKind) {
-  return FREE_ACCOUNTS.includes(kind) || state.accounts?.[kind].signedIn === true;
+  const signedIn = state.accounts?.[kind]?.signedIn;
+  return signedIn === true || (FREE_ACCOUNTS.includes(kind) && signedIn !== false);
 }
 
 function engineOption(kind: AgentKind) {
@@ -986,21 +989,22 @@ function newEntry(kind: AgentKind, role: RoleKey): DraftEntry {
 }
 
 /**
- * A full team from the accounts this machine has: the paid ones take planning, building and
- * review, and every desk they can't cover gets a free AI, alternating the two free ones so a
- * limit on one doesn't stop them all.
+ * A full team spread over every AI this machine can use, so a limit on one account doesn't
+ * stop them all: the paid ones plan, build and review, Gemini designs and OpenCode tests.
+ * A desk whose AI is missing gets the next one that works here, free ones last.
  */
 function suggestedTeam(): DraftEntry[] {
-  const free: AgentKind[] = ['opencode', 'antigravity'];
+  const usable = (kind: AgentKind) => hasAccount(kind) && state.accounts?.[kind]?.installed !== false;
+  const free: AgentKind[] = ['antigravity', 'opencode'].filter((k) => usable(k as AgentKind)) as AgentKind[];
   let turn = 0;
-  const pick = (...prefer: AgentKind[]) => prefer.find(hasAccount) ?? free[turn++ % free.length];
+  const pick = (...prefer: AgentKind[]) => prefer.find(usable) ?? free[turn++ % free.length] ?? 'opencode';
   return [
     newEntry(pick('claude', 'codex'), 'coordenador'),
-    newEntry(pick('codex', 'claude'), 'designer'),
+    newEntry(pick('antigravity', 'codex', 'claude'), 'designer'),
     newEntry(pick('claude', 'codex'), 'executor'),
-    newEntry(pick('codex'), 'executor'),
-    newEntry(pick(), 'tester'),
-    newEntry(pick('claude', 'codex'), 'revisor'),
+    newEntry(pick('codex', 'claude'), 'executor'),
+    newEntry(pick('opencode', 'antigravity'), 'tester'),
+    newEntry(pick('codex', 'claude'), 'revisor'),
   ];
 }
 
@@ -1053,7 +1057,9 @@ function renderAccounts() {
         : !status.installed
           ? ['off', 'Falta instalar']
           : free
-            ? ['on', 'Grátis']
+            ? status.signedIn === false
+              ? ['off', 'Sem login']
+              : ['on', status.signedIn ? 'Logado neste computador · grátis' : 'Grátis']
             : status.signedIn
               ? ['on', 'Logado neste computador']
               : ['off', 'Sem login'];
@@ -1831,9 +1837,19 @@ async function addImages(files: File[]) {
   finally { readingImages = false; attachButton.disabled = false; $('send-command').removeAttribute('disabled'); }
 }
 imageInput.addEventListener('change', () => { void addImages(Array.from(imageInput.files ?? [])); imageInput.value = ''; });
-composer.addEventListener('paste', event => {
-  const files = Array.from(event.clipboardData?.files ?? []);
-  if (files.length) { event.preventDefault(); void addImages(files); }
+// Like a chat app: a screenshot (Win + Shift + S, Print Screen) pasted anywhere in the office
+// goes to the message box. Other fields (Ajustes, the project path, the terminal) keep their own paste.
+document.addEventListener('paste', event => {
+  const target = event.target as HTMLElement | null;
+  if (target?.closest('input, dialog, .xterm') || (target?.closest('textarea') && !composer.contains(target))) return;
+  const items = Array.from(event.clipboardData?.items ?? []);
+  const files = items.filter(item => item.kind === 'file' && item.type.startsWith('image/'))
+    .map(item => item.getAsFile()).filter((file): file is File => !!file)
+    .map((file, i) => file.name && file.name !== 'image.png' ? file : new File([file], `print-${Date.now()}-${i + 1}.${file.type.split('/')[1] || 'png'}`, { type: file.type }));
+  if (!files.length) return;
+  event.preventDefault();
+  if (!composer.contains(target)) commandField.focus();
+  void addImages(files);
 });
 let dragDepth = 0;
 composer.addEventListener('dragenter', event => {

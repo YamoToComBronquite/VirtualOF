@@ -100,6 +100,7 @@ const EXACT: Record<string, string> = {
   terminou: 'finished',
   'deu erro': 'error',
   'na fila': 'queued',
+  'Pode mandar mais: a mensagem entra na fila e roda quando terminar.': 'You can send more: the message waits in line and runs when this is done.',
   fazendo: 'doing',
   feito: 'done',
   falhou: 'failed',
@@ -396,6 +397,8 @@ const PATTERNS: [RegExp, string][] = [
   [/^às (\d\d:\d\d)$/, 'at $1'],
   [/^(\S+) às (\d\d:\d\d)$/, '$1 at $2'],
   [/^(\d+)% usado$/, '$1% used'],
+  [/^na fila · depois de (.+)$/, 'queued · after $1'],
+  [/^Na fila: (.+) começa quando (.+) terminar\.$/, 'Queued: $1 starts when $2 is done.'],
 ];
 
 let current: Lang = 'pt';

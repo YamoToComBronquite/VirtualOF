@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { ModelCatalog, ModelOption } from '../shared/types.ts';
+import { setAgySignedIn } from './accounts.ts';
 import { agyPath } from './agents/agy.ts';
 import { OPENCODE_DEFAULT_MODEL, opencodePath, spawnOpencode } from './agents/opencode.ts';
 
@@ -36,8 +37,11 @@ function codexModels(): ModelOption[] {
   return options;
 }
 
-/** `agy models` prints one "slug<TAB>label" line per model the Google account can use. */
-function agyModels(): Promise<ModelOption[]> {
+/**
+ * `agy models` prints one "slug<TAB>label" line per model the Google account can use. It lists
+ * none when the account is signed out, which is how the office knows the Gemini login.
+ */
+export function agyModels(): Promise<ModelOption[]> {
   const fallback: ModelOption[] = [{ id: '', label: 'Padrão do Antigravity' }];
   return new Promise((resolve) => {
     let out = '';
@@ -55,6 +59,7 @@ function agyModels(): Promise<ModelOption[]> {
         .map((line) => line.split('\t'))
         .filter((parts) => parts.length === 2 && parts[0].trim())
         .map(([id, label]) => ({ id: id.trim(), label: label.trim() }));
+      setAgySignedIn(listed.length > 0);
       resolve([...fallback, ...listed]);
     });
   });

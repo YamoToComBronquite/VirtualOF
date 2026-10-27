@@ -22,6 +22,13 @@ function codexSignedIn() {
   return !!process.env.OPENAI_API_KEY || !!process.env.CODEX_API_KEY || existsSync(join(dir, 'auth.json'));
 }
 
+/** Known once `agy models` answers: it only lists models for a signed-in Google account. */
+let agySignedIn: boolean | undefined;
+
+export function setAgySignedIn(signedIn: boolean) {
+  agySignedIn = signedIn;
+}
+
 /**
  * Which accounts this machine is signed in to, from the files each CLI keeps its login in,
  * and the command that sets each one up. A login file only says a login exists, not that it
@@ -47,6 +54,7 @@ export function detectAccounts(): Record<Account, AccountStatus> {
       hint: 'Entre com sua conta do ChatGPT no navegador que abrir.',
     },
     antigravity: {
+      signedIn: agyInstalled ? agySignedIn : undefined,
       installed: agyInstalled,
       login: agyInstalled ? `& "${agy}"` : AGY_INSTALL,
       hint: agyInstalled

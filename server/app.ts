@@ -9,7 +9,7 @@ import { MAX_TOTAL_IMAGE_BYTES, MAX_IMAGES, MAX_THUMBNAIL_BYTES } from '../share
 import { detectAccounts } from './accounts.ts';
 import { watchAntigravity } from './agents/antigravity.ts';
 import { loadConfig, saveLanguage, savePermissionMode, saveProject } from './config.ts';
-import { loadModels } from './models.ts';
+import { agyModels, loadModels } from './models.ts';
 import { Office } from './office.ts';
 import { Orchestrator } from './orchestrator.ts';
 import { Shell } from './shell.ts';
@@ -76,7 +76,10 @@ export async function startOffice(options: OfficeOptions) {
   office.autoSwitch = config.trocaAutomatica ?? true;
   office.lang = config.idioma ?? 'pt';
   office.permissionMode = config.aprovacao ?? 'manual';
-  office.models = await loadModels((models) => office.setModels(models));
+  office.models = await loadModels((models) => {
+    office.setModels(models);
+    office.setAccounts(detectAccounts()); // the Gemini login is known once agy lists its models
+  });
   const team = new Team(config, office);
   const orchestrator = new Orchestrator(office, team);
   const stopWatching = watchAntigravity(config.antigravity, office);
@@ -142,6 +145,72 @@ export async function startOffice(options: OfficeOptions) {
     }
   }
 
+  function startTask(member: Member, prompt: string, saved: RunImage[]) {
+    void runBackground(() => runDirect(member, prompt || IMAGE_ONLY, saved), () => discardImages(saved),
+      (error) => reportFailure(member.config.id, error), cleanupFailure).finally(drain);
+  }
+
+  function startCommand(prompt: string, saved: RunImage[]) {
+    void runBackground(() => orchestrator.start(prompt || IMAGE_ONLY, office.project, saved), () => discardImages(saved),
+      (error) => {
+        const text = `O comando geral falhou: ${errorText(error)}`;
+        console.warn(text, error);
+        try { office.write('equipe', 'error', text); } finally { orchestrator.fail(text); }
+      }, cleanupFailure).finally(drain);
+  }
+
+  /**
+   * Messages sent while the team (or that agent) was busy, in the order they came. A general
+   * command needs the whole team free, so whatever came after it waits behind it.
+   */
+  const queue: { agentId?: string; prompt: string; images: RunImage[] }[] = [];
+
+  function dropQueued(match: (item: (typeof queue)[number]) => boolean, why: string) {
+    for (let i = queue.length - 1; i >= 0; i--) {
+      if (!match(queue[i])) continue;
+      const [item] = queue.splice(i, 1);
+      try { discardImages(item.images); } catch (error) { cleanupFailure(error); }
+      office.write(item.agentId ?? 'equipe', 'error', `${why}: ${item.prompt.slice(0, 120) || '(imagem)'}`);
+    }
+  }
+
+  function drain() {
+    const claimed = new Set<string>();
+    for (let i = 0; i < queue.length; ) {
+      const item = queue[i];
+      if (!item.agentId) {
+        if (orchestrator.running || team.busy || claimed.size) break;
+        queue.splice(i, 1);
+        const error = isFolder(office.project) ? orchestrator.startError() : 'Escolha a pasta do projeto antes de mandar um comando.';
+        if (error) {
+          discardImages(item.images);
+          office.write('equipe', 'error', `O comando da fila não rodou: ${error}`);
+          continue;
+        }
+        startCommand(item.prompt, item.images);
+        break;
+      }
+      const member = team.get(item.agentId);
+      if (!member) {
+        queue.splice(i, 1);
+        discardImages(item.images);
+        continue;
+      }
+      if (orchestrator.running || member.runner.busy || claimed.has(item.agentId)) {
+        i++;
+        continue;
+      }
+      queue.splice(i, 1);
+      claimed.add(item.agentId);
+      startTask(member, item.prompt, item.images);
+    }
+  }
+
+  function enqueue(agentId: string | undefined, prompt: string, saved: RunImage[], waitingFor: string) {
+    queue.push({ agentId, prompt, images: saved });
+    office.notice(`Na fila: ${agentId ? team.label(team.get(agentId)!) : 'o comando geral'} começa quando ${waitingFor} terminar.`);
+  }
+
   function handle(msg: ClientMessage, reply: (msg: ServerMessage) => void) {
     const submission = (accepted: boolean, text?: string, duplicate?: boolean) => {
       if ((msg.type === 'task' || msg.type === 'command') && msg.requestId) {
@@ -168,15 +237,15 @@ export async function startOffice(options: OfficeOptions) {
         if ('error' in checked) return submission(false, checked.error);
         const { images } = checked;
         if (!member || !runner || (!prompt && !images.length)) return submission(false, 'Escolha um agente e escreva uma mensagem ou anexe uma imagem.');
-        if (orchestrator.running) return submission(false, 'Tem um comando geral em andamento. Pare o plano para falar direto com um agente.');
-        if (runner.busy) return submission(false, 'Esse agente ainda está numa tarefa. Espere terminar ou clique em Parar.');
         const saved = recordSubmission(member.config.id, prompt, images, msg.requestId);
-        void runBackground(() => runDirect(member, prompt || IMAGE_ONLY, saved), () => discardImages(saved),
-          (error) => reportFailure(member.config.id, error), cleanupFailure);
+        if (orchestrator.running || runner.busy || queue.length) {
+          enqueue(member.config.id, prompt, saved, orchestrator.running ? 'o comando geral' : team.label(member));
+        } else startTask(member, prompt, saved);
         submission(true);
         return;
       }
       case 'stop':
+        dropQueued((item) => item.agentId === msg.agentId, 'Tirado da fila');
         team.get(msg.agentId)?.runner.stop();
         return;
       case 'command': {
@@ -186,15 +255,13 @@ export async function startOffice(options: OfficeOptions) {
         const { images } = checked;
         if (!prompt && !images.length) return submission(false, 'Escreva uma mensagem ou anexe uma imagem.');
         if (!isFolder(office.project)) return submission(false, 'Escolha a pasta do projeto antes de mandar um comando.');
-        const error = orchestrator.startError();
+        // Busy is not an error: the command waits in line. Anything else (no team, no coordinator) is.
+        const waits = orchestrator.running || team.busy || queue.length > 0;
+        const error = waits ? null : orchestrator.startError();
         if (error) return submission(false, error);
         const saved = recordSubmission('equipe', prompt, images, msg.requestId);
-        void runBackground(() => orchestrator.start(prompt || IMAGE_ONLY, office.project, saved), () => discardImages(saved),
-          (error) => {
-            const text = `O comando geral falhou: ${errorText(error)}`;
-            console.warn(text, error);
-            try { office.write('equipe', 'error', text); } finally { orchestrator.fail(text); }
-          }, cleanupFailure);
+        if (waits) enqueue(undefined, prompt, saved, orchestrator.running ? 'o comando geral atual' : 'a equipe');
+        else startCommand(prompt, saved);
         submission(true);
         return;
       }
@@ -205,10 +272,16 @@ export async function startOffice(options: OfficeOptions) {
         office.publish({ type: 'language', lang: msg.lang });
         return;
       case 'stop-plan':
+        dropQueued((item) => !item.agentId, 'Tirado da fila');
         orchestrator.stop();
         return;
       case 'check-accounts':
         office.setAccounts(detectAccounts());
+        // A Gemini login done in the terminal only shows once agy is asked again.
+        void agyModels().then((list) => {
+          office.setModels({ ...office.models, antigravity: list });
+          office.setAccounts(detectAccounts());
+        });
         return;
       case 'list-skills':
         office.publish({ type: 'skills', skills: listSkills() });

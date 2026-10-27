@@ -172,9 +172,11 @@ export interface PlanStep {
   agentId: string;
   task: string;
   status: PlanStepStatus;
+  /** Steps (by id) that must finish first; absent means "after every earlier step". */
+  dependsOn?: number[];
 }
 
-/** A general command: the coordinator orders the steps, the office runs them one by one. */
+/** A general command: the coordinator plans the steps, the office runs independent ones at the same time. */
 export interface Plan {
   command: string;
   status: 'planning' | 'running' | 'done' | 'stopped' | 'error';

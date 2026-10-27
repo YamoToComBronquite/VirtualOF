@@ -18,7 +18,7 @@ Um escritório virtual em pixel art para os seus agentes de IA. Você passa tare
 - **Sua configuração vai junto.** Os agentes Claude carregam as mesmas skills, plugins, servidores MCP e CLAUDE.md do seu Claude Code; o Codex usa a configuração dele em `~/.codex`. Os detalhes de cada agente mostram o que ele carregou.
 - **PowerShell embutido.** Um terminal de verdade na parte de baixo da janela (botão **Terminal** ou Ctrl + '), aberto na pasta do projeto.
 - **Cartão "Precisa do terminal".** Se um agente precisar de algo que só você pode fazer (login, instalação, comando interativo), ele para e o escritório mostra o comando exato. Clique em **Rodar no PowerShell** para rodar no terminal embutido, depois em **Já rodei**, e ele continua.
-- **Permissões viram post-its.** Quando o Claude quer editar um arquivo ou rodar um comando, aparece um post-it com **Aprovar** e **Negar**.
+- **Aprovação manual ou automática.** No modo **Manual** (padrão), os pedidos de ferramentas do Claude que exigem aprovação aparecem como post-its com **Aprovar** e **Negar**; com vários pedidos, **Aprovar todas** e **Negar todas** respondem a todos os post-its pendentes naquele momento. O modo **Automática** aprova esses pedidos sem perguntar e também libera os que já estavam esperando. O modo fica salvo para a próxima abertura. Os cartões de terminal continuam dependendo do usuário nos dois modos. Essa opção não muda as permissões do Codex, Gemini ou OpenCode.
 - **Deixe a sala do seu jeito.** A janela **Ambiente** escolhe o período do dia (noite, entardecer, dia), a cor da parede e o piso, mostra ou esconde o gato, o tapete, as plantas e a cafeteira, e coloca uma imagem sua na janela, desenhada em pixel art.
 - **Português ou inglês.** Escolha o idioma em **Ajustes**; os agentes também passam a responder nele.
 - **Acompanha o Antigravity.** As conversas do IDE Antigravity aparecem como personagens que se acendem quando estão trabalhando (só acompanhamento), quando há mesa livre.
@@ -85,7 +85,7 @@ O que você muda na página (pasta do projeto, funções, apelidos, modelos, ord
 Os agentes podem ler e alterar arquivos e rodar comandos no seu computador. Por isso:
 
 - O servidor só escuta em `127.0.0.1`, e o WebSocket só aceita conexões da própria página do escritório.
-- Toda ação do Claude que precisa de permissão passa por um post-it que você aprova.
+- No modo manual, os pedidos de ferramentas do Claude que chegam ao controle de aprovação do escritório aguardam sua resposta. O modo automático os aprova, inclusive os pendentes; ativá-lo pede confirmação. Pedidos cancelados são negados nos dois modos. Cartões de terminal nunca são aprovados pela troca de modo ou pelos botões de responder a todos.
 - O Codex não tem aprovação por ação nesse modo, então roda em sandbox `read-only`, a não ser quando a função dele altera arquivos (designer, fullstack ou tester, ou cobrindo um deles). Aí ele pode editar arquivos do projeto sem post-it; a tela de Ajustes avisa isso.
 - O PowerShell embutido tem o mesmo acesso que você. Só a página do escritório consegue usá-lo.
 - O Antigravity é só observado: o escritório vê quando os arquivos de conversa mudam e nunca abre nem altera esses arquivos.

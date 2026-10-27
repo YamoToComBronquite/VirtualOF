@@ -18,7 +18,7 @@ A pixel-art virtual office for your AI coding agents. Hand out tasks, approve wh
 - **Your setup comes along.** Claude agents load the same skills, plugins, MCP servers and CLAUDE.md as your Claude Code; Codex uses its own `~/.codex` setup. Each agent's details list what it loaded.
 - **Built-in PowerShell.** A real terminal along the bottom of the window (button **Terminal** or Ctrl + '), opened in the project folder.
 - **"Needs the terminal" cards.** If an agent needs something only you can do (a login, an install, an interactive command), it stops and the office shows the exact command. Click **Rodar no PowerShell** to run it in the built-in terminal, then **Já rodei** ("I ran it") and the agent carries on.
-- **Approvals as sticky notes.** When Claude wants to edit a file or run a command, a note pops up with **Aprovar** (approve) and **Negar** (deny).
+- **Manual or automatic approval.** In **Manual** mode (the default), Claude tool requests that require approval appear as sticky notes with **Aprovar** (approve) and **Negar** (deny); with multiple requests, **Aprovar todas** and **Negar todas** answer all currently pending notes. **Automática** mode approves these requests without asking and also approves notes already waiting. The mode is saved for the next start. Terminal cards still need the user in both modes. This switch does not change Codex, Gemini or OpenCode permissions.
 - **Make the room yours.** The **Ambiente** window sets the time of day (night, sunset, day), wall color and floor, hides or shows the cat, rug, plants and the coffee corner, and can put your own picture in the window, drawn as pixel art.
 - **Portuguese or English.** Pick the language in **Ajustes**; the agents are told to answer in it too.
 - **Watches Antigravity.** Antigravity IDE conversations show up as characters that light up while they work (watch-only), when there is a free desk.
@@ -85,7 +85,7 @@ What you change in the page (project folder, jobs, nicknames, models, desk order
 The agents can read and change files and run commands on your machine, so:
 
 - The server only listens on `127.0.0.1`, and the WebSocket only accepts connections from the office page itself.
-- Every Claude action that needs permission goes through a sticky note you approve.
+- In manual mode, Claude tool requests that reach the office's approval hook wait for your answer. Automatic mode approves them, including pending notes; enabling it asks for confirmation. Cancelled requests are denied in both modes. Terminal cards are never approved by the mode switch or the answer-all buttons.
 - Codex has no per-action approval in this mode, so it runs in a `read-only` sandbox unless its job changes files (designer, fullstack or tester, or covering for one). Then it can edit project files without a sticky note; the settings dialog warns about this.
 - The built-in PowerShell has the same access you have. Only the office page can reach it.
 - Antigravity is only observed: the office checks when its conversation files change and never opens or modifies them.

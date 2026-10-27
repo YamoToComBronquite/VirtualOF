@@ -5,7 +5,7 @@ import { createInterface } from 'node:readline';
 import { TERMINAL_RULE, type Office } from '../office.ts';
 import { clip } from './describe.ts';
 import type { AgentStatus } from '../../shared/types.ts';
-import type { RoleBrief, RunOutcome, Runner } from './runner.ts';
+import { imagesNote, type RoleBrief, type RunImage, type RunOutcome, type Runner } from './runner.ts';
 
 export const AGY_INSTALL = 'irm https://antigravity.google/cli/install.ps1 | iex';
 const LIMIT = /quota|rate.?limit|resource.?exhausted|\b429\b|usage limit|exhausted/i;
@@ -91,7 +91,7 @@ export class AgyAgent implements Runner {
     this.child?.kill();
   }
 
-  run(prompt: string, cwd: string, note?: string): Promise<RunOutcome> {
+  run(prompt: string, cwd: string, note?: string, images: RunImage[] = []): Promise<RunOutcome> {
     const { id } = this;
     const role = this.brief();
     // A new role or model starts a fresh conversation, like a new folder does.
@@ -101,6 +101,8 @@ export class AgyAgent implements Runner {
     this.conversationRole = setup;
 
     let input = note ? `${prompt}\n\n${note}` : prompt;
+    // agy has no attachment flag; it can open the files by path.
+    if (images.length) input = `${input}\n\n${imagesNote(images)}`;
     // agy has no system prompt flag, so the role goes in front of the first message.
     if (!this.conversationId) input = `${role.instructions}\n\n${TERMINAL_RULE}\n\n${input}`;
 

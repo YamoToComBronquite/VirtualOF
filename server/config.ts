@@ -2,7 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DESK_COUNT, type AgentKind, type Lang, type RoleKey } from '../shared/types.ts';
+import { DESK_COUNT, type AgentKind, type Lang, type PermissionMode, type RoleKey } from '../shared/types.ts';
 
 export interface AgentConfig {
   id: string;
@@ -43,12 +43,15 @@ export interface OfficeConfig {
   /** Hand work to an agent on another account when one hits its limit (default on). */
   trocaAutomatica?: boolean;
   idioma?: Lang;
+  /** How tool requests are approved (default manual). */
+  aprovacao?: PermissionMode;
 }
 
 /** What the user changed in the page; kept out of version control. */
 interface LocalSettings {
   projeto?: string;
   trocaAutomatica?: boolean;
+  aprovacao?: PermissionMode;
   /** Who sits at each desk, in desk order, as chosen in Configurações. */
   equipe?: Partial<SavedMember>[];
   idioma?: Lang;
@@ -84,6 +87,8 @@ export function loadConfig(): OfficeConfig {
   if (local.projeto !== undefined) config.projeto = local.projeto;
   if (local.trocaAutomatica !== undefined) config.trocaAutomatica = local.trocaAutomatica;
   if (local.idioma) config.idioma = local.idioma;
+  // Anything but an explicit 'auto' stays manual, so a hand-edited file can't turn approvals off by accident.
+  config.aprovacao = local.aprovacao === 'auto' ? 'auto' : 'manual';
   // Teams saved before desks had their own AI and color carry neither: the agents of 0.1.0 get
   // theirs back from LEGACY_DESKS; anything else unknown is dropped.
   config.agentes = (local.equipe ?? [])
@@ -103,6 +108,10 @@ export function saveProject(project: string) {
 
 export function saveLanguage(lang: Lang) {
   writeLocal({ idioma: lang });
+}
+
+export function savePermissionMode(mode: PermissionMode) {
+  writeLocal({ aprovacao: mode });
 }
 
 export function saveTeam(team: SavedMember[], autoSwitch: boolean) {

@@ -63,12 +63,37 @@ export interface AgentView {
 export type LogKind = 'user' | 'task' | 'text' | 'tool' | 'result' | 'error' | 'permission';
 
 export interface LogEntry {
+  requestId?: string;
   id: number;
   agentId: string;
   at: number;
   kind: LogKind;
   text: string;
+  /** Images the user sent with a 'user' entry, for thumbnails; only the newest entries keep them. */
+  images?: { name: string; mime: string; data: string }[];
 }
+
+export type ImageMime = 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp';
+
+export const IMAGE_MIMES: ImageMime[] = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
+
+/** At most this many images per message, each at most MAX_IMAGE_BYTES once decoded. */
+export const MAX_IMAGES = 5;
+export const MAX_IMAGE_BYTES = 3.5 * 1024 * 1024;
+export const MAX_TOTAL_IMAGE_BYTES = 15 * 1024 * 1024;
+export const MAX_THUMBNAIL_BYTES = 32 * 1024;
+
+/** An image sent with a message; `data` is plain base64, without the "data:...;base64," prefix. */
+export interface ImageAttachment {
+  name: string;
+  mime: ImageMime;
+  data: string;
+  /** Small JPEG preview for the office log; full images only reach the agents. */
+  thumbnail?: { mime: 'image/jpeg'; data: string };
+}
+
+/** 'manual' asks on a sticky note; 'auto' approves every tool request right away. */
+export type PermissionMode = 'manual' | 'auto';
 
 export interface PermissionRequest {
   id: string;
@@ -161,8 +186,12 @@ export interface Plan {
 export type Lang = 'pt' | 'en';
 
 export type ServerMessage =
+  /** Acceptance is not task completion. Replaying an accepted id never runs it again. */
+  | { type: 'submission'; requestId: string; accepted: boolean; text?: string; serverId?: string; duplicate?: boolean }
+  | { type: 'submission-status'; requestId: string; accepted: boolean; serverId: string }
   | {
       type: 'snapshot';
+      serverId: string;
       agents: AgentView[];
       log: LogEntry[];
       permissions: PermissionRequest[];
@@ -170,6 +199,7 @@ export type ServerMessage =
       plan: Plan | null;
       quota: Record<Account, Quota>;
       autoSwitch: boolean;
+      permissionMode: PermissionMode;
       models: ModelCatalog;
       accounts: Record<Account, AccountStatus>;
       project: string;
@@ -182,6 +212,7 @@ export type ServerMessage =
   | { type: 'skill-imported'; ok: boolean; message: string }
   | { type: 'quota'; quota: Record<Account, Quota> }
   | { type: 'auto-switch'; enabled: boolean }
+  | { type: 'permission-mode'; mode: PermissionMode }
   | { type: 'plan'; plan: Plan | null }
   | { type: 'agent'; agent: AgentView }
   | { type: 'agent-removed'; id: string }
@@ -204,16 +235,20 @@ export interface TerminalAlert {
 }
 
 export type ClientMessage =
-  | { type: 'task'; agentId: string; prompt: string }
+  | { type: 'submission-status'; requestId: string }
+  | { type: 'task'; agentId: string; prompt: string; images?: ImageAttachment[]; requestId?: string }
   | { type: 'stop'; agentId: string }
   | { type: 'permission'; id: string; allow: boolean }
+  /** Answers every pending sticky note at once; terminal cards are not included. */
+  | { type: 'permission-all'; allow: boolean }
+  | { type: 'permission-mode'; mode: PermissionMode }
   | { type: 'terminal-done'; id: string }
   | { type: 'shell-input'; data: string }
   | { type: 'shell-run'; command: string }
   | { type: 'shell-resize'; cols: number; rows: number }
   | { type: 'shell-restart' }
   | { type: 'shell-kill' }
-  | { type: 'command'; prompt: string }
+  | { type: 'command'; prompt: string; images?: ImageAttachment[]; requestId?: string }
   | { type: 'team'; team: MemberSettings[]; autoSwitch: boolean }
   | { type: 'check-accounts' }
   | { type: 'list-skills' }

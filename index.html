@@ -139,6 +139,18 @@
 
       <div class="dock">
         <ul id="terminal" class="dock__cards" aria-label="Precisa do terminal"></ul>
+        <div id="approval" class="approval">
+          <div class="approval__mode" role="radiogroup" aria-labelledby="approval-label">
+            <span id="approval-label" class="approval__label">Aprovação</span>
+            <button type="button" class="approval__option" data-mode="manual" role="radio" aria-checked="true">Manual</button>
+            <button type="button" class="approval__option" data-mode="auto" role="radio" aria-checked="false">Automática</button>
+          </div>
+          <span id="approval-flag" class="approval__flag" role="status" hidden>Os agentes aprovam sozinhos</span>
+          <div id="approval-bulk" class="approval__bulk" hidden>
+            <button type="button" id="approve-all" class="small"></button>
+            <button type="button" id="deny-all" class="ghost small">Negar todas</button>
+          </div>
+        </div>
         <ul id="notes" class="dock__cards" aria-label="Pedidos de permissão"></ul>
 
         <details id="plan" class="plan" hidden>

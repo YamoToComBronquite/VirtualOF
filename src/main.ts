@@ -1,5 +1,6 @@
 import {
   DESK_COUNT,
+  IMAGE_MIMES, MAX_IMAGES, MAX_IMAGE_BYTES, MAX_TOTAL_IMAGE_BYTES, MAX_THUMBNAIL_BYTES, type ImageAttachment, type ImageMime,
   EDITING_ROLES,
   FREE_ACCOUNTS,
   ROLE_NAMES,
@@ -15,6 +16,7 @@ import {
   type AgentView,
   type ClientMessage,
   type LogEntry,
+  type PermissionMode,
   type PermissionRequest,
   type Plan,
   type PlanStepStatus,
@@ -63,6 +65,7 @@ const state = {
     opencode: { status: 'unknown' },
   } as Record<Account, Quota>,
   autoSwitch: true,
+  permissionMode: 'manual' as PermissionMode,
   models: { claude: [], codex: [], antigravity: [], opencode: [] } as ModelCatalog,
   accounts: undefined as Record<Account, AccountStatus> | undefined,
   project: '',
@@ -74,6 +77,10 @@ const state = {
 const scene = new Scene($<HTMLCanvasElement>('scene'));
 let socket: WebSocket | undefined;
 const commandField = $<HTMLTextAreaElement>('command');
+let serverId: string | undefined;
+let pendingSubmission: { id: string; prompt: string; images: ImageAttachment[]; target: string; serverId?: string; retry: boolean; rejected?: boolean } | undefined;
+/** Keep only three local messages' full images; the server history carries previews. */
+const sessionImages = new Map<string, ImageAttachment[]>();
 const shell = new ShellDock($('shell'), $('shell-screen'), $('shell-cwd'), (msg) => send(msg), () => {
   $('open-shell').setAttribute('aria-pressed', String(shell.visible));
 });
@@ -119,7 +126,10 @@ function connect() {
     badge.classList.add('is-on');
   };
   ws.onclose = () => {
+    // Keep the immutable submission identity and payload until the server acknowledges it.
+    if (pendingSubmission) pendingSubmission.retry = false;
     socket = undefined;
+    renderPendingSubmission();
     badge.querySelector('span')!.textContent = 'desconectado';
     badge.classList.remove('is-on');
     setTimeout(connect, 2000);
@@ -129,7 +139,37 @@ function connect() {
 
 function receive(msg: ServerMessage) {
   switch (msg.type) {
+    case 'submission-status': {
+      const draft = pendingSubmission;
+      if (!draft || draft.id !== msg.requestId) break;
+      if (msg.accepted) finishSubmission();
+      else { draft.retry = draft.serverId === msg.serverId; renderPendingSubmission(); }
+      break;
+    }
+    case 'submission': {
+      const draft = pendingSubmission;
+      if (!draft || draft.id !== msg.requestId) break;
+      if (msg.accepted) {
+        finishSubmission();
+      } else {
+        const unchanged = commandField.value === draft.prompt && attachments.length === draft.images.length &&
+          attachments.every((image, index) => image === draft.images[index]);
+        if (unchanged) {
+          pendingSubmission = undefined;
+          sessionImages.delete(draft.id);
+        } else {
+          // Keep the refused original available without overwriting newer edits.
+          draft.rejected = true;
+          draft.retry = draft.serverId === msg.serverId;
+        }
+        renderPendingSubmission();
+        toast(msg.text ?? translate('Não foi possível enviar. O rascunho foi mantido.'));
+      }
+      break;
+    }
     case 'snapshot':
+      serverId = msg.serverId;
+      if (pendingSubmission) checkPendingSubmission();
       shell.clear();
       if (msg.lang !== getLang()) setLang(msg.lang);
       state.agents = msg.agents;
@@ -139,6 +179,7 @@ function receive(msg: ServerMessage) {
       state.plan = msg.plan;
       state.quota = msg.quota;
       state.autoSwitch = msg.autoSwitch;
+      state.permissionMode = msg.permissionMode;
       state.models = msg.models;
       state.accounts = msg.accounts;
       state.project = msg.project;
@@ -255,6 +296,10 @@ function receive(msg: ServerMessage) {
     case 'auto-switch':
       state.autoSwitch = msg.enabled;
       renderUsage();
+      break;
+    case 'permission-mode':
+      state.permissionMode = msg.mode;
+      renderNotes();
       break;
     case 'project':
       state.project = msg.project;
@@ -763,7 +808,36 @@ function renderNotes() {
       return li;
     }),
   );
+  renderApproval();
 }
+
+/** The Manual / Automática switch, the "auto is on" flag and the answer-all buttons. */
+function renderApproval() {
+  const auto = state.permissionMode === 'auto';
+  $('approval').classList.toggle('is-auto', auto);
+  for (const option of document.querySelectorAll<HTMLButtonElement>('.approval__option')) {
+    option.setAttribute('aria-checked', String(option.dataset.mode === state.permissionMode));
+  }
+  $('approval-flag').hidden = !auto;
+  const count = state.permissions.length;
+  $('approval-bulk').hidden = count < 2;
+  $('approve-all').textContent = `Aprovar todas (${count})`;
+}
+
+for (const option of document.querySelectorAll<HTMLButtonElement>('.approval__option')) {
+  option.addEventListener('click', () => {
+    const mode = option.dataset.mode as PermissionMode;
+    if (mode === state.permissionMode) return;
+    const warning =
+      'Com a aprovação automática, os agentes podem rodar comandos e editar arquivos sem perguntar. ' +
+      'Os pedidos de terminal continuam esperando você. Ativar?';
+    if (mode === 'auto' && !confirm(translate(warning))) return;
+    send({ type: 'permission-mode', mode });
+  });
+}
+
+$('approve-all').addEventListener('click', () => send({ type: 'permission-all', allow: true }));
+$('deny-all').addEventListener('click', () => send({ type: 'permission-all', allow: false }));
 
 /** With one agent picked in "Para", the conversation shows only that agent. */
 function logVisible(entry: LogEntry) {
@@ -779,7 +853,9 @@ function logItem(entry: LogEntry): HTMLElement | undefined {
     lastAsked.set(entry.agentId, entry.text.trim());
     const li = el('li', 'msg msg--user');
     li.append(el('p', 'msg__meta', entry.agentId === 'equipe' ? 'Você para a equipe' : `Você para ${agentName(entry.agentId)}`));
-    li.append(el('div', 'msg__bubble', entry.text));
+    const bubble = el('div', 'msg__bubble', entry.text);
+    if (entry.images?.length) bubble.append(imageGallery(entry.images, entry.requestId));
+    li.append(bubble);
     return li;
   }
   if (entry.kind === 'task' && lastAsked.get(entry.agentId) === entry.text.trim()) return undefined;
@@ -1467,11 +1543,14 @@ $('project-change').addEventListener('click', () => {
 $('command-form').addEventListener('submit', (event) => {
   event.preventDefault();
   const prompt = commandField.value;
-  if (!prompt.trim()) return;
-  if (state.target === 'equipe') send({ type: 'command', prompt });
-  else send({ type: 'task', agentId: state.target, prompt });
-  commandField.value = '';
-  growCommand();
+  if (pendingSubmission || readingImages || (!prompt.trim() && !attachments.length)) return;
+  if (socket?.readyState !== WebSocket.OPEN) { toast(translate('Sem conexão. Aguarde reconectar para enviar.')); return; }
+  const images = attachments.slice();
+  const requestId = crypto.randomUUID();
+  pendingSubmission = { id: requestId, prompt, images, target: state.target, serverId, retry: false };
+  sessionImages.set(requestId, images);
+  while (sessionImages.size > 3) sessionImages.delete(sessionImages.keys().next().value!);
+  transmitPendingSubmission();
 });
 
 $('stop-plan').addEventListener('click', () => {
@@ -1532,3 +1611,237 @@ redraw();
 document.fonts.ready.then(redraw);
 requestAnimationFrame(frame);
 connect();
+
+/* Resizable response panel; mobile retains its single column. */
+const resizeHandle = el('div', 'chat-resize');
+resizeHandle.tabIndex = 0;
+resizeHandle.setAttribute('role', 'separator');
+resizeHandle.setAttribute('aria-orientation', 'vertical');
+resizeHandle.setAttribute('aria-label', translate('Ajustar largura das respostas'));
+document.querySelector('.panel')!.prepend(resizeHandle);
+const CHAT_WIDTH_KEY = 'virtualof.chat-width';
+let chatWidth = 460;
+function setChatWidth(width: number, persist = true) {
+  chatWidth = Math.round(Math.max(320, Math.min(width, Math.max(320, innerWidth * .6))));
+  document.documentElement.style.setProperty('--chat-width', chatWidth + 'px');
+  resizeHandle.setAttribute('aria-valuemin', '320');
+  resizeHandle.setAttribute('aria-valuemax', String(Math.round(Math.max(320, innerWidth * .6))));
+  resizeHandle.setAttribute('aria-valuenow', String(chatWidth));
+  if (persist) try { localStorage.setItem(CHAT_WIDTH_KEY, String(chatWidth)); } catch { /* optional storage */ }
+}
+try {
+  const saved = Number(localStorage.getItem(CHAT_WIDTH_KEY));
+  if (Number.isFinite(saved) && saved >= 320 && saved <= 10000) chatWidth = saved;
+} catch { /* optional storage */ }
+setChatWidth(chatWidth, false);
+window.addEventListener('resize', () => setChatWidth(chatWidth, false));
+resizeHandle.addEventListener('pointerdown', event => {
+  if (event.button !== 0) return;
+  event.preventDefault(); resizeHandle.setPointerCapture(event.pointerId);
+});
+resizeHandle.addEventListener('pointermove', event => {
+  if (resizeHandle.hasPointerCapture(event.pointerId)) setChatWidth(innerWidth - event.clientX);
+});
+resizeHandle.addEventListener('pointerup', event => {
+  if (resizeHandle.hasPointerCapture(event.pointerId)) resizeHandle.releasePointerCapture(event.pointerId);
+});
+resizeHandle.addEventListener('dblclick', () => setChatWidth(460));
+resizeHandle.addEventListener('keydown', event => {
+  if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+    event.preventDefault(); setChatWidth(chatWidth + (event.key === 'ArrowLeft' ? 20 : -20));
+  }
+});
+
+const imageDialog = el('dialog', 'image-viewer');
+imageDialog.setAttribute('aria-label', translate('Visualizar imagem'));
+const closeImage = el('button', 'ghost', translate('Fechar imagem'));
+closeImage.type = 'button';
+closeImage.addEventListener('click', () => imageDialog.close());
+const largeImage = el('img');
+const imageCaption = el('p', 'hint');
+imageDialog.append(closeImage, imageCaption, largeImage);
+document.body.append(imageDialog);
+imageDialog.addEventListener('click', event => { if (event.target === imageDialog) imageDialog.close(); });
+imageDialog.addEventListener('close', () => largeImage.removeAttribute('src'));
+function imageGallery(images: { name: string; mime: string; data: string }[], requestId?: string, originals = false) {
+  const gallery = el('div', 'image-gallery');
+  for (const [index, image] of images.entries()) {
+    if (!image.data || !IMAGE_MIMES.includes(image.mime as ImageMime)) {
+      gallery.append(el('span', 'image-marker', '🖼 ' + image.name)); continue;
+    }
+    const button = el('button', 'image-thumb'); button.type = 'button';
+    const img = el('img'); img.src = 'data:' + image.mime + ';base64,' + image.data; img.alt = image.name;
+    button.append(img, el('span', undefined, image.name));
+    button.addEventListener('click', () => {
+      const original = originals ? image : requestId ? sessionImages.get(requestId)?.[index] : undefined;
+      largeImage.src = original ? 'data:' + original.mime + ';base64,' + original.data : img.src;
+      largeImage.alt = image.name;
+      imageCaption.textContent = translate(original ? 'Imagem enviada' : 'Prévia');
+      imageDialog.showModal();
+    });
+    gallery.append(button);
+  }
+  return gallery;
+}
+let attachments: ImageAttachment[] = [];
+let readingImages = false;
+const composer = $('command-form');
+// A pending attempt is distinct from the editable draft below it.
+const pendingBox = el('div', 'composer__pending');
+pendingBox.hidden = true;
+const pendingText = el('p', 'hint'); pendingText.setAttribute('role', 'status');
+const pendingSummary = el('p', 'hint');
+const checkPending = el('button', 'ghost', translate('Consultar envio'));
+const retryPending = el('button', 'ghost', translate('Reenviar tentativa'));
+const acknowledgePending = el('button', 'ghost', translate('Considerar recebido'));
+for (const button of [checkPending, retryPending, acknowledgePending]) button.type = 'button';
+pendingBox.append(pendingText, pendingSummary, checkPending, retryPending, acknowledgePending);
+composer.prepend(pendingBox);
+checkPending.addEventListener('click', checkPendingSubmission);
+retryPending.addEventListener('click', () => {
+  if (pendingSubmission?.retry && pendingSubmission.serverId === serverId) transmitPendingSubmission();
+});
+acknowledgePending.addEventListener('click', () => {
+  if (pendingSubmission?.rejected) {
+    sessionImages.delete(pendingSubmission.id);
+    pendingSubmission = undefined;
+    renderPendingSubmission();
+  } else finishSubmission();
+});
+function renderPendingSubmission() {
+  const draft = pendingSubmission;
+  pendingBox.hidden = !draft;
+  if (!draft) return;
+  pendingSummary.textContent = (draft.target === 'equipe' ? translate('Equipe') : agentName(draft.target)) + ': ' + draft.prompt + (draft.images.length ? '\n' + draft.images.map(image => image.name).join(', ') : '');
+  const connected = socket?.readyState === WebSocket.OPEN;
+  const changed = !!serverId && draft.serverId !== serverId;
+  pendingText.textContent = translate(changed
+    ? 'O servidor reiniciou. Não é seguro reenviar automaticamente. Confira a conversa antes de considerar recebido.'
+    : draft.rejected
+      ? 'Tentativa recusada. Reenvie a original ou descarte a tentativa para manter apenas suas novas edições.'
+    : draft.retry
+      ? 'Envio não recebido. Reenvie a mesma tentativa; suas edições ficam para uma nova mensagem.'
+      : 'Aguardando confirmação do envio. O texto e as imagens foram mantidos; consulte antes de enviar uma nova mensagem.')
+    + ' (' + draft.id.slice(0, 8) + ')';
+  checkPending.disabled = !connected;
+  retryPending.hidden = !draft.retry || changed;
+  retryPending.disabled = !connected;
+  acknowledgePending.textContent = translate(draft.rejected ? 'Descartar tentativa recusada' : 'Considerar recebido');
+  acknowledgePending.hidden = !changed && !draft.rejected;
+}
+function finishSubmission() {
+  const draft = pendingSubmission;
+  if (!draft) return;
+  pendingSubmission = undefined;
+  if (commandField.value === draft.prompt) commandField.value = '';
+  attachments = attachments.filter(image => !draft.images.includes(image));
+  renderAttachments(); growCommand(); imageError.hidden = true; renderPendingSubmission();
+}
+function checkPendingSubmission() {
+  const draft = pendingSubmission;
+  if (!draft || socket?.readyState !== WebSocket.OPEN) { renderPendingSubmission(); return; }
+  draft.retry = false;
+  try { send({ type: 'submission-status', requestId: draft.id }); }
+  catch { /* Keep the draft and identity for the next connection. */ }
+  renderPendingSubmission();
+}
+function transmitPendingSubmission() {
+  const draft = pendingSubmission;
+  if (!draft || socket?.readyState !== WebSocket.OPEN) { renderPendingSubmission(); return; }
+  draft.retry = false;
+  draft.rejected = false;
+  try {
+    const common = { prompt: draft.prompt, images: draft.images, requestId: draft.id };
+    if (draft.target === 'equipe') send({ type: 'command', ...common });
+    else send({ type: 'task', agentId: draft.target, ...common });
+  } catch { /* An ambiguous send must retain its original identity. */ }
+  renderPendingSubmission();
+}
+
+const attachmentList = el('div', 'image-gallery composer__images'); attachmentList.hidden = true;
+commandField.before(attachmentList);
+const attachButton = el('button', 'ghost composer__attach', translate('Anexar imagens')); attachButton.type = 'button';
+const imageInput = el('input'); imageInput.type = 'file'; imageInput.accept = IMAGE_MIMES.join(','); imageInput.multiple = true; imageInput.hidden = true;
+attachButton.addEventListener('click', () => imageInput.click());
+composer.querySelector('.composer__bar')!.prepend(attachButton, imageInput);
+const imageError = el('p', 'hint composer__image-error'); imageError.setAttribute('role', 'alert'); imageError.hidden = true;
+attachmentList.after(imageError);
+function renderAttachments() {
+  attachmentList.replaceChildren(); attachmentList.hidden = !attachments.length;
+  attachments.forEach((image, index) => {
+    const item = el('div', 'attachment'); item.append(imageGallery([image], undefined, true));
+    const remove = el('button', 'attachment__remove', '×'); remove.type = 'button';
+    remove.setAttribute('aria-label', translate('Remover imagem') + ': ' + image.name);
+    remove.addEventListener('click', () => { attachments.splice(index, 1); renderAttachments(); (attachmentList.querySelector('button') ?? attachButton).focus(); });
+    item.append(remove); attachmentList.append(item);
+  });
+}
+const imageBytes = (data: string) => data.length * 3 / 4 - (data.endsWith('==') ? 2 : data.endsWith('=') ? 1 : 0);
+
+/** Resize before transport; thumbnails alone are retained in the office history. */
+async function prepareImage(file: File): Promise<ImageAttachment> {
+  const url = URL.createObjectURL(file);
+  try {
+    const image = new Image();
+    image.src = url;
+    await image.decode();
+    const render = (side: number, quality: number) => {
+      const scale = Math.min(1, side / Math.max(image.naturalWidth, image.naturalHeight));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+      canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+      const ctx = canvas.getContext('2d')!;
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL('image/jpeg', quality).split(',')[1];
+    };
+    let mime: ImageMime = 'image/jpeg';
+    let data: string;
+    if ((file.type === 'image/png' || file.type === 'image/gif') && file.size <= 512 * 1024 &&
+        Math.max(image.naturalWidth, image.naturalHeight) <= 1568) {
+      mime = file.type;
+      data = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result).split(',')[1]);
+        reader.onerror = () => reject(reader.error); reader.onabort = () => reject(new Error('aborted'));
+        reader.readAsDataURL(file);
+      });
+    } else data = render(1568, 0.85);
+    const thumbnail = { mime: 'image/jpeg' as const, data: render(160, 0.75) };
+    if (imageBytes(data) > MAX_IMAGE_BYTES || imageBytes(thumbnail.data) > MAX_THUMBNAIL_BYTES) throw new Error('image too large');
+    const name = mime === file.type ? file.name : file.name.replace(/\.[^.]*$/, '') + '.jpg';
+    return { name, mime, data, thumbnail };
+  } finally { URL.revokeObjectURL(url); }
+}
+
+async function addImages(files: File[]) {
+  if (!files.length || readingImages) return;
+  imageError.hidden = true;
+  const fail = (text: string) => { imageError.textContent = translate(text); imageError.hidden = false; };
+  if (attachments.length + files.length > MAX_IMAGES) return fail('Envie até ' + MAX_IMAGES + ' imagens por mensagem.');
+  if (files.some(file => !IMAGE_MIMES.includes(file.type as ImageMime))) return fail('Escolha imagens PNG, JPEG, GIF ou WebP.');
+  readingImages = true; attachButton.disabled = true; $('send-command').setAttribute('disabled', '');
+  try {
+    const loaded = await Promise.all(files.map(prepareImage));
+    if ([...attachments, ...loaded].reduce((sum, image) => sum + imageBytes(image.data), 0) > MAX_TOTAL_IMAGE_BYTES) {
+      return fail('As imagens juntas podem ter até 15 MB após a redução.');
+    }
+    attachments.push(...loaded); renderAttachments();
+  } catch { fail('Não foi possível ler a imagem. Tente anexar novamente.'); }
+  finally { readingImages = false; attachButton.disabled = false; $('send-command').removeAttribute('disabled'); }
+}
+imageInput.addEventListener('change', () => { void addImages(Array.from(imageInput.files ?? [])); imageInput.value = ''; });
+composer.addEventListener('paste', event => {
+  const files = Array.from(event.clipboardData?.files ?? []);
+  if (files.length) { event.preventDefault(); void addImages(files); }
+});
+let dragDepth = 0;
+composer.addEventListener('dragenter', event => {
+  if (!event.dataTransfer?.types.includes('Files')) return;
+  event.preventDefault(); dragDepth++; composer.classList.add('is-dragging');
+});
+composer.addEventListener('dragover', event => { if (event.dataTransfer?.types.includes('Files')) { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; } });
+composer.addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; composer.classList.remove('is-dragging'); } });
+composer.addEventListener('drop', event => {
+  event.preventDefault(); dragDepth = 0; composer.classList.remove('is-dragging'); void addImages(Array.from(event.dataTransfer?.files ?? []));
+});

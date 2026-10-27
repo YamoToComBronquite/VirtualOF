@@ -1,10 +1,10 @@
-import { Codex, type Thread, type ThreadEvent, type ThreadItem } from '@openai/codex-sdk';
+import { Codex, type Input, type Thread, type ThreadEvent, type ThreadItem } from '@openai/codex-sdk';
 import { basename } from 'node:path';
 import { EDITING_ROLES } from '../../shared/types.ts';
 import { TERMINAL_RULE, type Office } from '../office.ts';
 import { codexBinary, packagedCodex } from './binaries.ts';
 import { clip } from './describe.ts';
-import type { RoleBrief, RunOutcome, Runner } from './runner.ts';
+import { imagesNote, type RoleBrief, type RunImage, type RunOutcome, type Runner } from './runner.ts';
 
 /** Codex ships inside this project's packages, so its login runs that same executable. */
 export function loginCommand() {
@@ -55,7 +55,7 @@ export class CodexAgent implements Runner {
     this.thread = undefined;
   }
 
-  async run(prompt: string, cwd: string, note?: string): Promise<RunOutcome> {
+  async run(prompt: string, cwd: string, note?: string, images: RunImage[] = []): Promise<RunOutcome> {
     const { id } = this;
     let input = note ? `${prompt}\n\n${note}` : prompt;
     const role = this.brief();
@@ -81,7 +81,10 @@ export class CodexAgent implements Runner {
     this.office.setStatus(id, 'thinking', 'Lendo a tarefa');
 
     try {
-      const { events } = await this.thread.runStreamed(input, { signal: this.abort.signal });
+      const turn: Input = images.length
+        ? [{ type: 'text', text: `${input}\n\n${imagesNote(images)}` }, ...images.map((i) => ({ type: 'local_image' as const, path: i.path }))]
+        : input;
+      const { events } = await this.thread.runStreamed(turn, { signal: this.abort.signal });
       for await (const event of events) this.handle(event);
     } catch (error) {
       if (this.abort?.signal.aborted) {

@@ -13,7 +13,7 @@ import { AgyAgent } from './agents/agy.ts';
 import { ClaudeAgent } from './agents/claude.ts';
 import { CodexAgent } from './agents/codex.ts';
 import { OpencodeAgent } from './agents/opencode.ts';
-import type { Runner } from './agents/runner.ts';
+import type { RunImage, Runner } from './agents/runner.ts';
 import { nameAgents, saveTeam, type AgentConfig, type OfficeConfig } from './config.ts';
 import type { Office } from './office.ts';
 
@@ -141,10 +141,10 @@ export class Team {
   }
 
   /** Runs a task with the agent temporarily playing `role` (when it covers for someone). */
-  async runAs(member: Member, role: RoleKey, prompt: string, cwd: string, note?: string) {
+  async runAs(member: Member, role: RoleKey, prompt: string, cwd: string, note?: string, images?: RunImage[]) {
     this.overrides.set(member.config.id, role);
     try {
-      return await member.runner.run(prompt, cwd, note);
+      return await member.runner.run(prompt, cwd, note, images);
     } finally {
       this.overrides.delete(member.config.id);
     }

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { ROLE_NAMES, type Plan } from '../shared/types.ts';
-import type { RunOutcome } from './agents/runner.ts';
+import { imagesNote, type RunImage, type RunOutcome } from './agents/runner.ts';
 import type { Office } from './office.ts';
 import type { Member, Team } from './team.ts';
 
@@ -39,6 +39,8 @@ export class Orchestrator {
   /** Whoever coordinates right now; it changes if the coordinator's account hits its limit. */
   private lead!: Member;
   private cwd = '';
+  private images: RunImage[] = [];
+  private imageRecipients = new Set<string>();
 
   constructor(
     private readonly office: Office,
@@ -54,20 +56,36 @@ export class Orchestrator {
     this.stopped = true;
     for (const member of this.team.list()) member.runner.stop();
     this.plan.status = 'stopped';
-    for (const step of this.plan.steps) if (step.status === 'pending') step.status = 'skipped';
+    for (const step of this.plan.steps) {
+      if (step.status === 'pending' || step.status === 'running') step.status = 'skipped';
+    }
     this.publish();
   }
 
-  async start(command: string, cwd: string) {
-    if (this.running) return this.office.notice('Já tem um comando geral em andamento.');
-    if (!this.team.list().length) return this.office.notice('O escritório está vazio. Monte a equipe em Ajustes.');
-    const coordinator = this.team.coordinator();
-    if (!coordinator) return this.office.notice('Escolha um coordenador em Configurações.');
+  /** An unexpected runner rejection must release the plan just like a normal failure. */
+  fail(summary: string) {
+    if (!this.running || !this.plan) return;
+    this.stopped = true;
+    for (const step of this.plan.steps) {
+      if (step.status === 'running') {
+        step.status = 'error';
+        this.office.setStatus(step.agentId, 'error', 'A tarefa falhou');
+      } else if (step.status === 'pending') step.status = 'skipped';
+    }
+    this.office.setStatus(this.lead.config.id, 'error', 'O comando geral falhou');
+    this.finish('error', summary);
+  }
+
+  /** Images go only to each agent's first turn within this command. */
+  async start(command: string, cwd: string, images: RunImage[] = []) {
+    const error = this.startError();
+    if (error) return this.office.notice(error);
+    const coordinator = this.team.coordinator()!;
     const workers = this.team.workers();
-    if (!workers.some((w) => w.config.papel === 'executor')) return this.office.notice('A equipe precisa de pelo menos um fullstack.');
-    if (this.team.busy) return this.office.notice('Espere os agentes terminarem a tarefa atual.');
 
     this.stopped = false;
+    this.images = images;
+    this.imageRecipients.clear();
     this.lead = coordinator;
     this.cwd = cwd;
     this.plan = { command, status: 'planning', steps: [] };
@@ -105,7 +123,7 @@ export class Orchestrator {
       const prompt = `Comando geral do usuário: "${command}"\n\nSua parte (passo ${position} de ${this.plan.steps.length}): ${step.task}`;
       let since = this.office.lastLogId;
       let outcome: RunOutcome = { ok: false, text: '', limited: this.office.isLimited(this.team.account(member)) };
-      if (!outcome.limited) outcome = await this.team.runAs(member, role, prompt, cwd);
+      if (!outcome.limited) outcome = await this.runWithImages(member, role, prompt);
       while (outcome.limited && this.office.autoSwitch && !this.stopped) {
         const cover = this.team.substitute(member);
         if (!cover) break;
@@ -115,10 +133,10 @@ export class Orchestrator {
         const note = this.team.handoverNote(member, prompt, since, outcome.text);
         member = cover;
         since = this.office.lastLogId;
-        outcome = await this.team.runAs(member, role, note, cwd);
+        outcome = await this.runWithImages(member, role, note);
       }
       if (this.stopped) return;
-      if (outcome.limited) return this.finish('error', this.outOfLimits());
+      if (outcome.limited) return this.fail(this.outOfLimits());
       step.status = outcome.ok ? 'done' : 'error';
       this.publish();
 
@@ -133,20 +151,39 @@ export class Orchestrator {
           'Se não precisa mudar nada, responda só: segue.',
       );
       if (this.stopped) return;
-      if (review.limited) return this.finish('error', this.outOfLimits());
-      const revised = review.ok ? parsePlan(review.text, ids) : null;
+      if (review.limited) return this.fail(this.outOfLimits());
+      if (!review.ok) return this.fail(`A revisão do passo ${position} falhou: ${review.text || '(sem resposta)'}`);
+      const revised = parsePlan(review.text, ids);
       if (revised) {
         this.replaceRemaining(revised);
         this.publish();
+      } else if (!/^segue[.!]?$/i.test(review.text.trim())) {
+        return this.fail(`A revisão do passo ${position} não confirmou a continuação nem apresentou um plano válido: ${clip(review.text || '(sem resposta)')}`);
       }
     }
     if (this.stopped) return;
 
+    // Valid replanning replaces only pending work. Failed executed steps and cap-skipped work
+    // remain in the plan and cannot be turned into success by a successful summary.
+    const allDone = this.plan.steps.every((step) => step.status === 'done');
     const summary = await this.ask(
-      'Todos os passos terminaram. Escreva para o usuário um resumo curto do que foi feito e do que ainda falta, se faltar algo. Sem bloco de plano.',
+      (allDone ? 'Todos os passos terminaram. ' : 'O plano tem passos com erro ou ignorados e não foi concluído com sucesso. ') +
+      'Escreva para o usuário um resumo curto do que foi feito e do que ainda falta, se faltar algo. Sem bloco de plano.',
     );
     if (this.stopped) return;
-    this.finish('done', summary.limited ? 'Todos os passos terminaram, mas o coordenador bateu o limite antes do resumo.' : summary.text);
+    if (summary.limited) return this.fail(this.outOfLimits());
+    if (!summary.ok) return this.fail(`O resumo final falhou: ${summary.text || '(sem resposta)'}`);
+    this.finish(allDone ? 'done' : 'error', allDone ? summary.text : `O plano terminou com passos em erro ou ignorados.\n${summary.text}`);
+  }
+
+  /** Check before accepting a browser submission, using the same rules as start(). */
+  startError() {
+    if (this.running) return 'Já tem um comando geral em andamento.';
+    if (!this.team.list().length) return 'O escritório está vazio. Monte a equipe em Ajustes.';
+    if (!this.team.coordinator()) return 'Escolha um coordenador em Configurações.';
+    if (!this.team.workers().some((w) => w.config.papel === 'executor')) return 'A equipe precisa de pelo menos um fullstack.';
+    if (this.team.busy) return 'Espere os agentes terminarem a tarefa atual.';
+    return null;
   }
 
   /**
@@ -155,16 +192,23 @@ export class Orchestrator {
    */
   private async ask(prompt: string) {
     let outcome: RunOutcome = { ok: false, text: '', limited: this.office.isLimited(this.team.account(this.lead)) };
-    if (!outcome.limited) outcome = await this.team.runAs(this.lead, 'coordenador', prompt, this.cwd);
+    if (!outcome.limited) outcome = await this.runWithImages(this.lead, 'coordenador', prompt);
     while (outcome.limited && this.office.autoSwitch && !this.stopped) {
       const cover = this.team.substitute(this.lead);
       if (!cover) break;
       const previous = this.lead;
       this.handover(previous, cover, 'a coordenação');
       this.lead = cover;
-      outcome = await this.team.runAs(cover, 'coordenador', `${this.briefing(previous)}\n\n${prompt}`, this.cwd);
+      outcome = await this.runWithImages(cover, 'coordenador', `${this.briefing(previous)}\n\n${prompt}`);
     }
     return outcome;
+  }
+
+  private runWithImages(member: Member, role: Parameters<Team['runAs']>[1], prompt: string) {
+    const first = !this.imageRecipients.has(member.config.id);
+    this.imageRecipients.add(member.config.id);
+    return this.team.runAs(member, role, prompt, this.cwd,
+      !first && this.images.length ? imagesNote(this.images) : undefined, first ? this.images : []);
   }
 
   /** Catches up a stand-in coordinator, who did not see the conversation so far. */
@@ -235,6 +279,7 @@ export class Orchestrator {
   }
 
   private finish(status: 'done' | 'error', summary: string) {
+    this.images = [];
     if (!this.plan) return;
     this.plan.status = status;
     this.plan.summary = summary;

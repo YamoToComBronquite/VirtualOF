@@ -8,17 +8,21 @@ import type {
   LogEntry,
   LogKind,
   ModelCatalog,
+  PermissionMode,
   PermissionRequest,
   Plan,
   Quota,
   ServerMessage,
   TerminalAlert,
+  ImageAttachment,
 } from '../shared/types.ts';
 
 /** When an SDK reports a limit without a reset time, assume it lasts this long. */
 const UNKNOWN_RESET_MS = 60 * 60 * 1000;
 
 const LOG_LIMIT = 500;
+/** How many log entries keep their small image previews. */
+const LOG_IMAGE_ENTRIES = 3;
 
 /**
  * Appended to every agent's instructions. The user drives the office from the browser, so
@@ -44,6 +48,9 @@ interface PendingPermission {
  * broadcast to the connected browsers.
  */
 export class Office {
+  /** Acceptance records live for this server instance, independently of the bounded log. */
+  readonly serverId = randomUUID();
+  private acceptedSubmissions = new Set<string>();
   private agents = new Map<string, AgentView>();
   private log: LogEntry[] = [];
   private pending = new Map<string, PendingPermission>();
@@ -57,6 +64,8 @@ export class Office {
   };
   /** Hand a step to another agent when its account hits the limit. */
   autoSwitch = true;
+  /** 'auto' approves tool requests without a sticky note; terminal cards still wait for the user. */
+  permissionMode: PermissionMode = 'manual';
   /** Language chosen in Ajustes; agents are told to reply in it. */
   lang: Lang = 'pt';
   /** Models each engine offers, for Configurações. */
@@ -80,6 +89,7 @@ export class Office {
   snapshot(): ServerMessage {
     return {
       type: 'snapshot',
+      serverId: this.serverId,
       agents: [...this.agents.values()],
       log: this.log,
       permissions: [...this.pending.values()].map((p) => p.request),
@@ -87,6 +97,7 @@ export class Office {
       plan: this.plan,
       quota: this.quota,
       autoSwitch: this.autoSwitch,
+      permissionMode: this.permissionMode,
       models: this.models,
       accounts: this.accounts,
       project: this.project,
@@ -171,14 +182,22 @@ export class Office {
     this.emit({ type: 'auto-switch', enabled });
   }
 
-  write(agentId: string, kind: LogKind, text: string) {
+  write(agentId: string, kind: LogKind, text: string, images?: ImageAttachment[], requestId?: string) {
     if (kind === 'task') {
       const agent = this.agents.get(agentId);
       if (agent) agent.usage.tasks++;
     }
-    const entry: LogEntry = { id: this.nextLogId++, agentId, at: Date.now(), kind, text };
+    const entry: LogEntry = { id: this.nextLogId++, agentId, at: Date.now(), kind, text, requestId };
+    if (images?.length) entry.images = images.map(({ name, thumbnail }) => ({ name, mime: thumbnail?.mime ?? 'image/jpeg', data: thumbnail?.data ?? '' }));
     this.log.push(entry);
     if (this.log.length > LOG_LIMIT) this.log.splice(0, this.log.length - LOG_LIMIT);
+    // Every snapshot carries the whole log, so only the newest messages keep their images.
+    if (entry.images) {
+      const withImages = this.log.filter((e) => e.images);
+      for (const old of withImages.slice(0, -LOG_IMAGE_ENTRIES)) {
+        old.images = old.images!.map(({ name, mime }) => ({ name, mime, data: '' }));
+      }
+    }
     this.emit({ type: 'log', entry });
   }
 
@@ -194,6 +213,14 @@ export class Office {
 
   notice(text: string) {
     this.emit({ type: 'notice', text });
+  }
+
+  hasSubmission(requestId: string) {
+    return this.acceptedSubmissions.has(requestId);
+  }
+
+  acceptSubmission(requestId: string) {
+    this.acceptedSubmissions.add(requestId);
   }
 
   /** Sends a message that isn't office state (e.g. a skills listing) to every open page. */
@@ -232,6 +259,11 @@ export class Office {
 
   /** Puts a sticky note on the board and waits for the user's answer (or the abort signal). */
   askPermission(agentId: string, tool: string, summary: string, signal?: AbortSignal): Promise<boolean> {
+    if (signal?.aborted) return Promise.resolve(false);
+    if (this.permissionMode === 'auto') {
+      this.write(agentId, 'permission', `Aprovado automaticamente: ${tool} · ${summary}`);
+      return Promise.resolve(true);
+    }
     const request: PermissionRequest = { id: randomUUID(), agentId, tool, summary };
     return new Promise((resolve) => {
       const settle = (allow: boolean) => {
@@ -253,5 +285,17 @@ export class Office {
     if (!pending) return;
     this.write(pending.request.agentId, 'permission', allow ? `Aprovado: ${pending.request.tool}` : `Negado: ${pending.request.tool}`);
     pending.resolve(allow);
+  }
+
+  /** Approves or denies every sticky note waiting now. Terminal cards stay: only the user can do those. */
+  answerAllPermissions(allow: boolean) {
+    for (const id of [...this.pending.keys()]) this.answerPermission(id, allow);
+  }
+
+  /** Switching to 'auto' also lets through the requests already waiting. */
+  setPermissionMode(mode: PermissionMode) {
+    this.permissionMode = mode;
+    this.emit({ type: 'permission-mode', mode });
+    if (mode === 'auto') this.answerAllPermissions(true);
   }
 }

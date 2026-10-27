@@ -6,7 +6,7 @@ import { createInterface } from 'node:readline';
 import { TERMINAL_RULE, type Office } from '../office.ts';
 import { clip } from './describe.ts';
 import type { AgentStatus } from '../../shared/types.ts';
-import type { RoleBrief, RunOutcome, Runner } from './runner.ts';
+import { imagesNote, type RoleBrief, type RunImage, type RunOutcome, type Runner } from './runner.ts';
 
 // npm.cmd on Windows: PowerShell's default policy blocks the npm.ps1 that a plain `npm` runs.
 export const OPENCODE_INSTALL = `${process.platform === 'win32' ? 'npm.cmd' : 'npm'} install -g opencode-ai`;
@@ -16,6 +16,8 @@ const LIMIT = /rate.?limit|too many requests|\b429\b|quota|exhausted|usage limit
 const AUTH = /api.?key|unauthori[sz]ed|\b401\b|authenticat|not logged/i;
 /** Ids that are safe to put on a command line (the Windows launcher goes through cmd.exe). */
 const SAFE_ARG = /^[\w./:@-]+$/;
+/** cmd expands these even in quotes; other path characters are passed quoted. */
+const UNSAFE_SHELL_PATH = /["%!\r\n\0]/;
 
 /** The opencode launcher: on PATH (npm, scoop, choco) or where its own installer puts it. */
 export function opencodePath(): string | undefined {
@@ -36,7 +38,19 @@ export function opencodePath(): string | undefined {
 export function spawnOpencode(exe: string, args: string[], cwd: string) {
   const shell = /\.(cmd|bat)$/i.test(exe);
   // `opencode run` takes its folder from PWD before the real cwd, so both must point at the project.
-  return spawn(shell ? `"${exe}"` : exe, args, { cwd, shell, windowsHide: true, env: { ...process.env, PWD: cwd } });
+  return spawn(shell ? `"${exe}"` : exe, shell ? args.map(arg => `"${arg}"`) : args,
+    { cwd, shell, windowsHide: true, env: { ...process.env, PWD: cwd } });
+}
+
+/** `--file` for each image opencode can take; the rest are only cited in the task's note. */
+export function fileArgs(exe: string, images: RunImage[]) {
+  const args: string[] = [];
+  const skipped: RunImage[] = [];
+  for (const image of images) {
+    if (!existsSync(image.path) || (/\.(cmd|bat)$/i.test(exe) && UNSAFE_SHELL_PATH.test(image.path))) skipped.push(image);
+    else args.push('--file', image.path);
+  }
+  return { args, skipped };
 }
 
 function statusForTool(tool: string): AgentStatus {
@@ -105,7 +119,7 @@ export class OpencodeAgent implements Runner {
     this.child?.kill();
   }
 
-  run(prompt: string, cwd: string, note?: string): Promise<RunOutcome> {
+  run(prompt: string, cwd: string, note?: string, images: RunImage[] = []): Promise<RunOutcome> {
     const { id } = this;
     const role = this.brief();
     const setup = `${role.key}|${role.model}`;
@@ -114,6 +128,8 @@ export class OpencodeAgent implements Runner {
     this.sessionRole = setup;
 
     let input = note ? `${prompt}\n\n${note}` : prompt;
+    // Images go as --file attachments; the note with their paths covers any that can't.
+    if (images.length) input = `${input}\n\n${imagesNote(images)}`;
     // No system prompt flag here either, so the role goes in front of the first message.
     if (!this.sessionId) input = `${role.instructions}\n\n${TERMINAL_RULE}\n\n${input}`;
 
@@ -132,6 +148,11 @@ export class OpencodeAgent implements Runner {
     const args = ['run', '--format', 'json'];
     if (SAFE_ARG.test(model)) args.push('--model', model);
     if (this.sessionId && SAFE_ARG.test(this.sessionId)) args.push('--session', this.sessionId);
+    const attached = fileArgs(exe, images);
+    args.push(...attached.args);
+    for (const image of attached.skipped) {
+      this.office.write(id, 'error', `Não foi possível anexar "${image.name}" ao OpenCode: ${image.path}. O caminho segue na nota da tarefa.`);
+    }
 
     return new Promise((resolve) => {
       let stderr = '';

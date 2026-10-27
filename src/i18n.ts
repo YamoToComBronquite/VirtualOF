@@ -7,6 +7,26 @@
 import type { Lang } from '../shared/types.ts';
 
 const EXACT: Record<string, string> = {
+"Tentativa recusada. Reenvie a original ou descarte a tentativa para manter apenas suas novas edições.": "Submission rejected. Retry the original or discard the attempt to keep only your newer edits.",
+"Descartar tentativa recusada": "Discard rejected attempt",
+"Consultar envio": "Check submission",
+"Reenviar tentativa": "Retry submission",
+"Considerar recebido": "Mark as received",
+"O servidor reiniciou. Não é seguro reenviar automaticamente. Confira a conversa antes de considerar recebido.": "The server restarted. Retrying automatically is unsafe. Check the conversation before marking it as received.",
+"Envio não recebido. Reenvie a mesma tentativa; suas edições ficam para uma nova mensagem.": "Submission not received. Retry the same attempt; your edits remain for a new message.",
+"Aguardando confirmação do envio. O texto e as imagens foram mantidos; consulte antes de enviar uma nova mensagem.": "Waiting for submission confirmation. Text and images were kept; check before sending a new message.",
+"Ajustar largura das respostas": "Resize response panel",
+"Visualizar imagem": "View image",
+"Fechar imagem": "Close image",
+"Prévia": "Preview",
+"Imagem enviada": "Sent image",
+"Não foi possível enviar. O rascunho foi mantido.": "Could not send. Your draft was kept.",
+"Não foi possível salvar o modo de aprovação. O modo anterior foi mantido.": "Could not save approval mode. The previous mode was kept.",
+"Anexar imagens": "Attach images",
+"Remover imagem": "Remove image",
+"Escolha imagens PNG, JPEG, GIF ou WebP.": "Choose PNG, JPEG, GIF or WebP images.",
+"Não foi possível ler a imagem. Tente anexar novamente.": "Could not read the image. Try attaching it again.",
+"Sem conexão. Aguarde reconectar para enviar.": "Disconnected. Wait for reconnection before sending.",
   // Header, tools and project
   'conectando…': 'connecting…',
   conectado: 'connected',
@@ -56,6 +76,12 @@ const EXACT: Record<string, string> = {
   'Já rodei': 'I ran it',
   Aprovar: 'Approve',
   Negar: 'Deny',
+  Aprovação: 'Approval',
+  Automática: 'Automatic',
+  'Os agentes aprovam sozinhos': 'Agents approve on their own',
+  'Negar todas': 'Deny all',
+  'Com a aprovação automática, os agentes podem rodar comandos e editar arquivos sem perguntar. Os pedidos de terminal continuam esperando você. Ativar?':
+    'With automatic approval, agents can run commands and edit files without asking. Terminal requests still wait for you. Turn it on?',
   'Clique para ver a tarefa inteira': 'Click to see the whole task',
   'Executando o plano': 'Running the plan',
   'Plano concluído': 'Plan finished',
@@ -305,6 +331,8 @@ const EXACT: Record<string, string> = {
 };
 
 const PATTERNS: [RegExp, string][] = [
+  [/^Envie até (\d+) imagens por mensagem\.$/, 'Send up to $1 images per message.'],
+  [/^Cada imagem pode ter até (\d+) MB\.$/, 'Each image can be up to $1 MB.'],
   [/^(.+) pede permissão$/, '$1 asks for permission'],
   [/^(.+) precisa do terminal$/, '$1 needs the terminal'],
   [/^(.+) terminou$/, '$1 finished'],
@@ -345,7 +373,9 @@ const PATTERNS: [RegExp, string][] = [
   [/^Editou (.+)$/, 'Edited $1'],
   [/^Precisa do terminal: (.+)$/s, 'Needs the terminal: $1'],
   [/^Pediu permissão: (.+)$/s, 'Asked permission: $1'],
+  [/^Aprovado automaticamente: (.+)$/s, 'Approved automatically: $1'],
   [/^Aprovado: (.+)$/, 'Approved: $1'],
+  [/^Aprovar todas \((\d+)\)$/, 'Approve all ($1)'],
   [/^Negado: (.+)$/, 'Denied: $1'],
   [/^Projeto: (.+)$/, 'Project: $1'],
   [/^Essa pasta não existe: (.+)$/, "That folder doesn't exist: $1"],

@@ -15,6 +15,7 @@
   "scripts": {
     "start": "node --import tsx server/index.ts",
     "typecheck": "tsc --noEmit -p .",
+    "test": "vitest run",
     "build:web": "vite build",
     "build:server": "esbuild server/app.ts --bundle --platform=node --format=esm --target=node22 --packages=external --outfile=dist-server/app.mjs",
     "build": "npm run build:web && npm run build:server",
@@ -40,7 +41,8 @@
     "esbuild": "^0.28.2",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
-    "vite": "^8.3.5"
+    "vite": "^8.3.5",
+    "vitest": "^5.0.5"
   },
   "main": "electron/main.mjs",
   "author": "Yamo",

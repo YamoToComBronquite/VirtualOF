@@ -1,8 +1,23 @@
-import { query, type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+import { query, type SDKMessage, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { TERMINAL_RULE, type Office } from '../office.ts';
 import { claudeBinary } from './binaries.ts';
 import { clip, describeTool, statusForTool } from './describe.ts';
-import type { RoleBrief, RunOutcome, Runner } from './runner.ts';
+import { imagesNote, type RoleBrief, type RunImage, type RunOutcome, type Runner } from './runner.ts';
+
+/** The prompt as one user message with image blocks, the way the SDK takes images. */
+async function* withImages(text: string, images: RunImage[]): AsyncIterable<SDKUserMessage> {
+  yield {
+    type: 'user',
+    parent_tool_use_id: null,
+    message: {
+      role: 'user',
+      content: [
+        ...images.map((i) => ({ type: 'image' as const, source: { type: 'base64' as const, media_type: i.mime, data: i.data } })),
+        { type: 'text' as const, text: `${text}\n\n${imagesNote(images)}` },
+      ],
+    },
+  };
+}
 
 const WINDOW_NAMES: Record<string, string> = {
   five_hour: '5 horas',
@@ -41,7 +56,7 @@ export class ClaudeAgent implements Runner {
     this.sessionCost = 0;
   }
 
-  async run(prompt: string, cwd: string, note?: string): Promise<RunOutcome> {
+  async run(prompt: string, cwd: string, note?: string, images: RunImage[] = []): Promise<RunOutcome> {
     const { id } = this;
     // A session belongs to one folder; switching projects starts a fresh conversation.
     if (this.sessionCwd !== cwd) this.reset();
@@ -53,8 +68,9 @@ export class ClaudeAgent implements Runner {
     this.office.setStatus(id, 'thinking', 'Lendo a tarefa');
 
     try {
+      const text = note ? `${prompt}\n\n${note}` : prompt;
       const run = query({
-        prompt: note ? `${prompt}\n\n${note}` : prompt,
+        prompt: images.length ? withImages(text, images) : text,
         options: {
           cwd,
           resume: this.sessionId,

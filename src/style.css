@@ -502,7 +502,13 @@ button.ghost {
 
 /* Settings dialog */
 
+/* Tool windows sit over the office, beside the right panel, and leave the panel usable */
 .settings {
+  position: fixed;
+  inset: 16px 396px auto auto;
+  z-index: 20;
+  margin: 0;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
   box-sizing: border-box;
   width: min(560px, calc(100vw - 32px));
   max-height: calc(100vh - 32px);
@@ -674,13 +680,6 @@ select {
 
 .settings--side {
   width: min(340px, calc(100vw - 32px));
-  max-height: calc(100vh - 32px);
-  margin: 16px 396px auto auto;
-  overflow-y: auto;
-}
-
-.settings--side::backdrop {
-  background: transparent;
 }
 
 .choice {
@@ -748,8 +747,9 @@ select {
 }
 
 @media (max-width: 860px) {
-  .settings--side {
-    margin: auto;
+  .settings {
+    inset: 16px 16px auto;
+    margin: 0 auto;
   }
 }
 

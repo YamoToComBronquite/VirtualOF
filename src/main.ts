@@ -843,6 +843,38 @@ function toast(text: string) {
   toastTimer = window.setTimeout(() => (box.hidden = true), 5000);
 }
 
+/* ---------- Tool windows: Ambiente, Skills and Ajustes ---------- */
+
+// They open without blocking the page, so the toolbar button that opened one also closes it.
+const PANELS: Record<string, string> = { ambiente: 'open-ambiente', skills: 'open-skills', settings: 'open-settings' };
+
+function panelOpen(id: string) {
+  return $<HTMLDialogElement>(id).open;
+}
+
+/** Closes a window without saving; Ajustes only saves through its own button. */
+function closePanel(id: string) {
+  $<HTMLDialogElement>(id).close('cancel');
+}
+
+function showPanel(id: string) {
+  for (const other of Object.keys(PANELS)) if (other !== id && panelOpen(other)) closePanel(other);
+  $<HTMLDialogElement>(id).show();
+  $(PANELS[id]).setAttribute('aria-pressed', 'true');
+}
+
+for (const [id, button] of Object.entries(PANELS)) {
+  $(id).addEventListener('close', () => $(button).setAttribute('aria-pressed', 'false'));
+}
+document.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape') return;
+  const open = Object.keys(PANELS).find(panelOpen);
+  if (open) {
+    closePanel(open);
+    $(PANELS[open]).focus();
+  }
+});
+
 /* ---------- Settings: accounts, who sits at each desk, roles, models and desk order ---------- */
 
 /** The office's own agents (Antigravity IDE conversations are only watched). */
@@ -929,7 +961,7 @@ function openSettings() {
   send({ type: 'check-accounts' }); // a login done in the terminal shows up without restarting
   renderAccounts();
   renderSettings();
-  $<HTMLDialogElement>('settings').showModal();
+  showPanel('settings');
 }
 
 function renderAccounts() {
@@ -1108,7 +1140,7 @@ $('team-suggest').addEventListener('click', () => {
   renderSettings();
 });
 
-$('open-settings').addEventListener('click', openSettings);
+$('open-settings').addEventListener('click', () => (panelOpen('settings') ? closePanel('settings') : openSettings()));
 $('settings').addEventListener('close', () => {
   const dialog = $<HTMLDialogElement>('settings');
   if (dialog.returnValue === 'save' && !draftProblem()) {
@@ -1244,8 +1276,9 @@ $('ambiente-reset').addEventListener('click', () => {
 });
 
 $('open-ambiente').addEventListener('click', () => {
+  if (panelOpen('ambiente')) return closePanel('ambiente');
   fillAmbienteForm(scene.theme);
-  $<HTMLDialogElement>('ambiente').showModal();
+  showPanel('ambiente');
 });
 
 scene.theme = loadTheme();
@@ -1349,8 +1382,9 @@ async function pickSkill(input: HTMLInputElement, fromFolder: boolean) {
 }
 
 $('open-skills').addEventListener('click', () => {
+  if (panelOpen('skills')) return closePanel('skills');
   send({ type: 'list-skills' });
-  $<HTMLDialogElement>('skills').showModal();
+  showPanel('skills');
 });
 $('skills-share').addEventListener('click', () => send({ type: 'share-skills' }));
 $('skill-folder').addEventListener('change', (e) => void pickSkill(e.target as HTMLInputElement, true));

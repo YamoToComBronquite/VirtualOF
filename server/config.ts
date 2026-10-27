@@ -68,14 +68,26 @@ function writeLocal(patch: LocalSettings) {
   writeFileSync(LOCAL_PATH, `${JSON.stringify({ ...readLocal(), ...patch }, null, 2)}\n`);
 }
 
+/** The fixed team of version 0.1.0, whose saved desks only had an id. */
+const LEGACY_DESKS: Record<string, Pick<SavedMember, 'tipo' | 'cor'> & { apelido?: string }> = {
+  chefe: { tipo: 'claude', cor: '#e3a04f' },
+  dev: { tipo: 'claude', cor: '#d9705a', apelido: 'Claude Dev' },
+  revisor: { tipo: 'codex', cor: '#4fb3a5' },
+  gemini: { tipo: 'antigravity', cor: '#6f8cf0' },
+  astra: { tipo: 'codex', cor: '#5fbf8f' },
+  critico: { tipo: 'claude', cor: '#c98bd9', apelido: 'Claude Revisor' },
+};
+
 export function loadConfig(): OfficeConfig {
   const config = JSON.parse(readFileSync(CONFIG_PATH, 'utf8')) as OfficeConfig;
   const local = readLocal();
   if (local.projeto !== undefined) config.projeto = local.projeto;
   if (local.trocaAutomatica !== undefined) config.trocaAutomatica = local.trocaAutomatica;
   if (local.idioma) config.idioma = local.idioma;
-  // Teams saved before desks had their own AI and color carry neither; those start over empty.
+  // Teams saved before desks had their own AI and color carry neither: the agents of 0.1.0 get
+  // theirs back from LEGACY_DESKS; anything else unknown is dropped.
   config.agentes = (local.equipe ?? [])
+    .map((m) => (m.id && !m.tipo && m.id in LEGACY_DESKS ? { ...LEGACY_DESKS[m.id], ...m } : m))
     .filter((m): m is SavedMember => !!(m.id && m.tipo && m.tipo in ENGINE_NAMES && m.papel && m.cor))
     .slice(0, DESK_COUNT)
     .map((m) => ({ ...m, nome: '' }));

@@ -8,7 +8,8 @@ import { clip } from './describe.ts';
 import type { AgentStatus } from '../../shared/types.ts';
 import type { RoleBrief, RunOutcome, Runner } from './runner.ts';
 
-export const OPENCODE_INSTALL = 'npm install -g opencode-ai';
+// npm.cmd on Windows: PowerShell's default policy blocks the npm.ps1 that a plain `npm` runs.
+export const OPENCODE_INSTALL = `${process.platform === 'win32' ? 'npm.cmd' : 'npm'} install -g opencode-ai`;
 /** A model OpenCode offers for free, used when none was picked in Configurações. */
 export const OPENCODE_DEFAULT_MODEL = 'opencode/big-pickle';
 const LIMIT = /rate.?limit|too many requests|\b429\b|quota|exhausted|usage limit/i;
@@ -19,7 +20,9 @@ const SAFE_ARG = /^[\w./:@-]+$/;
 /** The opencode launcher: on PATH (npm, scoop, choco) or where its own installer puts it. */
 export function opencodePath(): string | undefined {
   const names = process.platform === 'win32' ? ['opencode.exe', 'opencode.cmd'] : ['opencode'];
-  const dirs = [...(process.env.PATH ?? '').split(delimiter), join(homedir(), '.opencode', 'bin')];
+  // npm's global folder is listed too: an install done after the office started is not on its PATH yet.
+  const npmGlobal = process.env.APPDATA ? [join(process.env.APPDATA, 'npm')] : [];
+  const dirs = [...(process.env.PATH ?? '').split(delimiter), ...npmGlobal, join(homedir(), '.opencode', 'bin')];
   for (const dir of dirs.filter(Boolean)) {
     for (const name of names) {
       const file = join(dir, name);

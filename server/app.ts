@@ -201,7 +201,7 @@ export async function startOffice(options: OfficeOptions) {
   if (options.web === 'dev') {
     // Vite is a development tool; the desktop app never loads it.
     const { createServer: createVite } = await import('vite');
-    const vite = await createVite({ root: options.root, appType: 'spa', server: { middlewareMode: true, hmr: { server } } });
+    const vite = await createVite({ root: options.root, appType: 'spa', server: { middlewareMode: true, hmr: { server }, watch: { ignored: ['**/release/**', '**/dist/**', '**/dist-server/**'] } } });
     server.on('request', (req, res) => vite.middlewares(req, res));
   } else {
     server.on('request', serveStatic(options.web.dir));

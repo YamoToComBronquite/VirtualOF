@@ -37,7 +37,9 @@ export class Shell {
     if (this.pty) return;
     const cwd = existsSync(this.folder()) ? this.folder() : homedir();
     const program = process.platform === 'win32' ? 'powershell.exe' : process.env.SHELL || 'bash';
-    const args = process.platform === 'win32' ? ['-NoLogo'] : [];
+    // Windows' default policy blocks npm.ps1 and friends. RemoteSigned, for this shell only,
+    // runs local scripts and still refuses unsigned scripts downloaded from the internet.
+    const args = process.platform === 'win32' ? ['-NoLogo', '-ExecutionPolicy', 'RemoteSigned'] : [];
     // Electron sets this for its own helpers; a shell started from the app must not inherit it.
     const env = { ...process.env };
     delete env.ELECTRON_RUN_AS_NODE;

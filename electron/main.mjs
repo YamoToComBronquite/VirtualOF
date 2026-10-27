@@ -51,35 +51,55 @@ async function open() {
   watchForUpdates();
 }
 
-// Installed copies check the GitHub Releases of the repo, download a newer version in the
-// background and offer to restart. Running from source (npm run app) never updates itself.
+// Installed copies check the GitHub Releases of the repo when they open (and every 4 hours).
+// A new version is offered right away; the download only starts if the user says yes, shows its
+// progress on the taskbar icon, and the app restarts into it. Running from source never updates.
 function watchForUpdates() {
   if (!app.isPackaged) return;
   const { autoUpdater } = updater;
-  let asked = false;
+  autoUpdater.autoDownload = false;
+  let busy = false;
 
-  autoUpdater.on('update-downloaded', async (info) => {
-    if (asked) return;
-    asked = true;
+  autoUpdater.on('update-available', async (info) => {
+    if (busy) return;
+    busy = true;
     const { response } = await dialog.showMessageBox(win, {
       type: 'info',
-      title: 'Atualização pronta',
-      message: `A versão ${info.version} do VirtualOF já foi baixada.`,
-      detail: 'Reiniciar agora para atualizar? Se os agentes estiverem trabalhando, eles param. Se escolher depois, a atualização entra quando você fechar o app.',
-      buttons: ['Reiniciar e atualizar', 'Depois'],
+      title: 'Atualização disponível',
+      message: `Tem uma versão nova do VirtualOF: ${info.version} (você está na ${app.getVersion()}).`,
+      detail: 'Atualizar agora? O download leva alguns minutos e aparece no ícone da barra de tarefas. No fim o app reinicia sozinho; se os agentes estiverem trabalhando, eles param.',
+      buttons: ['Atualizar agora', 'Depois'],
       defaultId: 0,
       cancelId: 1,
     });
-    if (response === 0) {
-      office?.shutdown();
-      autoUpdater.quitAndInstall();
+    if (response !== 0) {
+      busy = false;
+      return;
     }
+    autoUpdater.downloadUpdate().catch((error) => {
+      busy = false;
+      win?.setProgressBar(-1);
+      void dialog.showMessageBox(win, {
+        type: 'warning',
+        title: 'Atualização',
+        message: 'Não consegui baixar a atualização.',
+        detail: `${error?.message ?? error}\n\nO VirtualOF continua na versão atual e tenta de novo na próxima vez que abrir.`,
+      });
+    });
+  });
+  autoUpdater.on('download-progress', (progress) => win?.setProgressBar(progress.percent / 100));
+  autoUpdater.on('update-downloaded', () => {
+    win?.setProgressBar(-1);
+    office?.shutdown();
+    autoUpdater.quitAndInstall();
   });
   // No internet or no release yet is normal; the app just keeps the version it has.
   autoUpdater.on('error', (error) => console.warn('[update]', error?.message ?? error));
 
-  const check = () => autoUpdater.checkForUpdates().catch(() => {});
-  void check();
+  const check = () => {
+    if (!busy) autoUpdater.checkForUpdates().catch(() => {});
+  };
+  check();
   setInterval(check, 4 * 60 * 60 * 1000);
 }
 

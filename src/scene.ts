@@ -1,4 +1,5 @@
-import type { AgentStatus, AgentView } from '../shared/types.ts';
+import type { AgentStatus, AgentView, PlanStepStatus } from '../shared/types.ts';
+import { translate } from './i18n.ts';
 
 /** Logical canvas size; everything is drawn on this grid and scaled up by a whole number. */
 export const W = 384;
@@ -28,13 +29,21 @@ const C = {
 /** How the room looks; chosen in the Ambiente window and kept in the browser. */
 export interface Theme {
   periodo: 'noite' | 'entardecer' | 'dia';
-  parede: 'ameixa' | 'floresta' | 'terracota' | 'grafite';
+  parede: 'ameixa' | 'floresta' | 'terracota' | 'grafite' | 'pedra';
   piso: 'madeira' | 'carpete' | 'xadrez';
   gato: boolean;
   tapete: boolean;
   plantas: boolean;
   /** Coffee corner and server rack. */
   extras: boolean;
+  /** Weather outside the window. */
+  clima: 'limpo' | 'chuva' | 'neve';
+  /** A string of twinkling lights along the top of the wall. */
+  luzes: boolean;
+  /** A tear-off calendar under the clock, showing today. */
+  calendario: boolean;
+  /** Wall lanterns; by night and at dusk they light the room in warm pools. */
+  lanternas: boolean;
 }
 
 export const DEFAULT_THEME: Theme = {
@@ -45,6 +54,31 @@ export const DEFAULT_THEME: Theme = {
   tapete: true,
   plantas: true,
   extras: true,
+  clima: 'limpo',
+  luzes: true,
+  calendario: true,
+  lanternas: true,
+};
+
+/** Where the wall lanterns hang (x, room pixels). */
+const LANTERNS = [66, 376];
+
+/** What the corkboard shows: the open project and the current plan's steps, as a small kanban. */
+export interface Board {
+  project: string;
+  steps: PlanStepStatus[];
+}
+
+const BULBS = ['#ff6b6b', '#ffd166', '#6be0a0', '#6bb7ff', '#d78bff'];
+/** Drops that slide down the glass, each at its own pace. */
+const GLASS_DROPS = Array.from({ length: 14 }, (_, i) => ({ x: 133 + ((i * 47) % 118), y: (i * 13) % 34, speed: 60 + ((i * 37) % 70) }));
+const LIGHTNING_EVERY = 11000;
+
+/** The sky on a rainy day, evening or night: grey and low. */
+const RAIN_SKY: Record<Theme['periodo'], { top: string; bottom: string; cloud: string }> = {
+  dia: { top: '#6f7884', bottom: '#a3acb6', cloud: 'rgba(90, 98, 110, 0.85)' },
+  entardecer: { top: '#3d3648', bottom: '#7a6370', cloud: 'rgba(60, 52, 70, 0.85)' },
+  noite: { top: '#0e111c', bottom: '#262b3d', cloud: 'rgba(30, 34, 50, 0.9)' },
 };
 
 const WALLS: Record<Theme['parede'], { wall: string; stripe: string; wainscot: string; panel: string; trim: string }> = {
@@ -52,6 +86,7 @@ const WALLS: Record<Theme['parede'], { wall: string; stripe: string; wainscot: s
   floresta: { wall: '#22382f', stripe: '#1f332b', wainscot: '#1a2b24', panel: '#20342b', trim: '#2f4a3e' },
   terracota: { wall: '#4a2c26', stripe: '#442822', wainscot: '#36201b', panel: '#402620', trim: '#5c3a31' },
   grafite: { wall: '#2b2d33', stripe: '#27292f', wainscot: '#202227', panel: '#26282e', trim: '#3a3d45' },
+  pedra: { wall: '#2c3340', stripe: '#252b36', wainscot: '#1f242e', panel: '#262c38', trim: '#4a3a2a' },
 };
 
 const PERIODS: Record<
@@ -79,6 +114,20 @@ export const DESKS = [
 
 const DESK_W = 78;
 const ACTIVE: AgentStatus[] = ['thinking', 'reading', 'writing', 'running', 'waiting'];
+
+/** What the tag over an agent's head says it is doing. */
+const STATUS_TAGS: Partial<Record<AgentStatus, string>> = {
+  thinking: 'PENSANDO',
+  reading: 'LENDO',
+  writing: 'CODANDO',
+  running: 'RODANDO',
+  waiting: 'ESPERANDO',
+  done: 'PRONTO',
+  error: 'ERRO',
+};
+
+/** How long a hand-off arrow stays on screen. */
+const LINK_MS = 4500;
 
 /**
  * Seated character seen from the front, 16 px wide. Letters are palette slots:
@@ -145,11 +194,6 @@ const SKYLINE = Array.from({ length: 15 }, (_, i) => {
   return { x: 134 + i * 8, h, lit };
 });
 const STARS = Array.from({ length: 18 }, () => ({ x: 134 + Math.floor(rand() * 116), y: 12 + Math.floor(rand() * 16) }));
-const BOOKS = Array.from({ length: 21 }, () => ({
-  w: 3 + Math.floor(rand() * 2),
-  h: 8 + Math.floor(rand() * 4),
-  color: ['#b9504a', '#4f7fb3', '#d4a043', '#5b9a6a', '#8a66b0', '#cfc6b0', '#c77b45'][Math.floor(rand() * 7)],
-}));
 const PLANKS = Array.from({ length: 40 }, () => ({
   color: Math.floor(rand() * 4),
   offset: Math.floor(rand() * 70),
@@ -249,6 +293,8 @@ export class Scene {
   /** The user's own picture for the window view, already shrunk to the window's size. */
   view?: CanvasImageSource;
   doneCount = 0;
+  /** The corkboard's kanban; without a plan it keeps one note per finished task. */
+  board: Board = { project: '', steps: [] };
   /** When each agent last finished, so the check mark shows for a few seconds. */
   private finishedAt = new Map<string, number>();
 
@@ -264,6 +310,22 @@ export class Scene {
 
   markFinished(id: string) {
     this.finishedAt.set(id, performance.now());
+  }
+
+  /** Arrows drawn between desks while work changes hands, like a live whiteboard diagram. */
+  private links: { from: string; to: string; label: string; at: number }[] = [];
+  /** When each agent joined the team, for the "new hire" banner. */
+  private hires = new Map<string, number>();
+
+  /** Shows work going from one desk to another for a few seconds ("PASSA TAREFA", "ENTREGA"…). */
+  link(from: string, to: string, label: string) {
+    if (from === to) return;
+    this.links.push({ from, to, label, at: performance.now() });
+    if (this.links.length > 8) this.links.shift();
+  }
+
+  hired(id: string) {
+    this.hires.set(id, performance.now());
   }
 
   resize() {
@@ -292,7 +354,7 @@ export class Scene {
     if (this.theme.tapete) this.runner();
     this.furniture(time);
     DESKS.forEach((desk, i) => this.desk(desk.x, desk.y, this.agents[i], time, i));
-    this.vignette();
+    this.vignette(time);
 
     const { screen } = this;
     screen.fillStyle = '#120f1c';
@@ -300,10 +362,125 @@ export class Scene {
     screen.imageSmoothingEnabled = false;
     screen.drawImage(this.world, this.offsetX, this.offsetY, W * this.scale, H * this.scale);
     // Text goes on top at screen resolution, so it stays sharp at any zoom.
+    this.wallText();
     DESKS.forEach((desk, i) => {
       const agent = this.agents[i];
       if (agent) this.nameplate(desk.x, desk.y + 12, agent);
     });
+    DESKS.forEach((desk, i) => {
+      const agent = this.agents[i];
+      if (agent) this.roleTag(desk.x, desk.y, agent, time);
+    });
+    this.drawLinks(time);
+  }
+
+  /** Plain pixel-font text at a room point, at screen resolution, squeezed to fit `maxW` room pixels. */
+  private text(x: number, y: number, text: string, color: string, maxW: number, div = 4) {
+    const ctx = this.screen;
+    const size = 8 * Math.max(1, Math.round(this.scale / div));
+    ctx.font = `400 ${size}px "Silkscreen", monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = color;
+    ctx.fillText(text, Math.round(this.offsetX + x * this.scale), Math.round(this.offsetY + y * this.scale) + 1, maxW * this.scale);
+  }
+
+  /** The words on the wall: the project on the corkboard, its column titles and today on the calendar. */
+  private wallText() {
+    const name = this.board.project.split(/[\\/]/).filter(Boolean).at(-1) || 'VirtualOF';
+    this.text(326, 10.5, name.toUpperCase(), '#3b2a1c', 40);
+    ['A FAZER', 'FAZENDO', 'FEITO'].forEach((title, col) => this.text(300 + col * 26, 19.5, translate(title), '#2a1d12', 24, 5));
+    if (this.theme.calendario) this.text(89, 43.5, String(new Date().getDate()), '#2e2645', 14, 3);
+  }
+
+  /** Where an agent's head is, in room pixels; undefined when it has no desk. */
+  private headOf(id: string) {
+    const index = this.agents.findIndex((a) => a.id === id);
+    const desk = DESKS[index];
+    return desk ? { x: desk.x, y: desk.y - 30 } : undefined;
+  }
+
+  /** A pixel-font label centered on a room point, painted at screen resolution so it stays sharp. */
+  private label(x: number, y: number, text: string, fill: string, ink: string) {
+    const ctx = this.screen;
+    const size = 8 * Math.max(1, Math.round(this.scale / 3));
+    ctx.font = `400 ${size}px "Silkscreen", monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const w = Math.round(ctx.measureText(text).width + size);
+    const h = Math.round(size * 1.5);
+    const sx = Math.round(this.offsetX + x * this.scale);
+    const sy = Math.round(this.offsetY + y * this.scale);
+    const edge = Math.max(1, Math.round(this.scale / 2));
+    ctx.fillStyle = C.outline;
+    ctx.fillRect(sx - Math.round(w / 2) - edge, sy - Math.round(h / 2) - edge, w + edge * 2, h + edge * 2);
+    ctx.fillStyle = fill;
+    ctx.fillRect(sx - Math.round(w / 2), sy - Math.round(h / 2), w, h);
+    ctx.fillStyle = ink;
+    ctx.fillText(text, sx, sy + 1);
+  }
+
+  /**
+   * Role and what the agent is doing, over its head ("FULLSTACK · CODANDO"). A new hire's tag
+   * flashes "NOVO NA EQUIPE!" for its first seconds instead.
+   */
+  private roleTag(cx: number, top: number, agent: AgentView, time: number) {
+    const hired = this.hires.get(agent.id);
+    if (hired !== undefined && time - hired < 6000 && Math.floor((time - hired) / 700) % 2 === 0) {
+      this.label(cx, top - 26, translate('NOVO NA EQUIPE!'), C.note, C.outline);
+      return;
+    }
+    const doing = STATUS_TAGS[agent.status];
+    const role = (agent.role || agent.kind || '').toUpperCase();
+    const text = [translate(role), doing ? translate(doing) : ''].filter(Boolean).join(' · ');
+    const active = ACTIVE.includes(agent.status);
+    if (text) this.label(cx, top - 26, text, active ? agent.color : '#2a2340', active ? C.outline : '#d8cfee');
+  }
+
+  /** Marching-dash arrows from desk to desk with their label, fading out after a few seconds. */
+  private drawLinks(time: number) {
+    const ctx = this.screen;
+    const s = this.scale;
+    this.links = this.links.filter((l) => time - l.at < LINK_MS);
+    for (const link of this.links) {
+      const from = this.headOf(link.from);
+      const to = this.headOf(link.to);
+      if (!from || !to) continue;
+      const age = time - link.at;
+      ctx.save();
+      ctx.globalAlpha = age > LINK_MS - 800 ? (LINK_MS - age) / 800 : 1;
+      const ax = this.offsetX + from.x * s;
+      const ay = this.offsetY + from.y * s;
+      const bx = this.offsetX + to.x * s;
+      const by = this.offsetY + to.y * s;
+      // A gentle arc, so arrows between desks of the same row don't run through the heads.
+      const mx = (ax + bx) / 2;
+      const my = (ay + by) / 2 - 18 * s;
+      ctx.lineWidth = Math.max(2, Math.round(s));
+      ctx.strokeStyle = `rgb(${C.lamp})`;
+      ctx.setLineDash([4 * s, 3 * s]);
+      ctx.lineDashOffset = -time / 25;
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.quadraticCurveTo(mx, my, bx, by);
+      ctx.stroke();
+      // Arrowhead along the curve's last direction
+      ctx.setLineDash([]);
+      const angle = Math.atan2(by - my, bx - mx);
+      const head = 5 * s;
+      ctx.fillStyle = `rgb(${C.lamp})`;
+      ctx.beginPath();
+      ctx.moveTo(bx, by);
+      ctx.lineTo(bx - head * Math.cos(angle - 0.5), by - head * Math.sin(angle - 0.5));
+      ctx.lineTo(bx - head * Math.cos(angle + 0.5), by - head * Math.sin(angle + 0.5));
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+      ctx.save();
+      ctx.globalAlpha = age > LINK_MS - 800 ? (LINK_MS - age) / 800 : 1;
+      this.label((from.x + to.x) / 2, (from.y + to.y) / 2 - 9, translate(link.label), C.paper, C.outline);
+      ctx.restore();
+    }
   }
 
   private rect(x: number, y: number, w: number, h: number, color: string) {
@@ -322,7 +499,11 @@ export class Scene {
   private wall(time: number) {
     const walls = WALLS[this.theme.parede];
     this.rect(0, 0, W, WALL_BOTTOM, walls.wall);
-    for (let x = 4; x < W; x += 12) this.rect(x, 0, 2, 50, walls.stripe);
+    if (this.theme.parede === 'pedra') this.stones();
+    else for (let x = 4; x < W; x += 12) this.rect(x, 0, 2, 50, walls.stripe);
+    // A dark ceiling beam along the top; the string lights hang from it.
+    this.rect(0, 0, W, 2, '#1d1626');
+    this.rect(0, 2, W, 1, '#3b2c22');
     // Wainscot with recessed panels, then the trim
     this.rect(0, 50, W, WALL_BOTTOM - 50, walls.wainscot);
     for (let x = 6; x < W - 20; x += 30) this.rect(x, 54, 24, 13, walls.panel);
@@ -337,7 +518,9 @@ export class Scene {
     this.ctx.clip();
     if (this.view) this.ctx.drawImage(this.view, 132, 10, 120, 34);
     else this.city(time);
+    this.weather(time);
     this.ctx.restore();
+    if (this.theme.clima === 'neve') this.rect(122, 45, 140, 1, '#e9eef7'); // snow piling on the sill
     this.rect(191, 10, 2, 34, '#4d4066');
     this.rect(132, 26, 120, 2, '#4d4066');
     this.box(122, 46, 140, 4, '#5e4f7a');
@@ -349,40 +532,202 @@ export class Scene {
     this.rect(112, 3, 160, 2, '#3a2f50');
     if (this.theme.gato) this.cat(time);
 
-    // Bookshelf
-    this.box(12, 10, 46, 58, '#5c3f2b');
-    for (let shelf = 0; shelf < 3; shelf++) {
-      const y = 14 + shelf * 17;
-      this.rect(15, y, 40, 13, '#2a1d15');
-      this.rect(15, y + 13, 40, 2, '#7a5538');
-      let x = 16;
-      for (let i = shelf * 7; i < shelf * 7 + 7 && x < 52; i++) {
-        const book = BOOKS[i];
-        this.rect(x, y + 13 - book.h, book.w, book.h, book.color);
-        this.rect(x, y + 13 - book.h, book.w, 1, 'rgba(255,255,255,0.18)');
-        x += book.w + 1;
-      }
-    }
+    this.bookshelf(time);
+    this.clock();
 
-    // Wall clock with the real time
-    const now = new Date();
-    this.box(80, 14, 18, 18, '#d9cfb8');
-    this.rect(82, 16, 14, 14, '#f4ecd8');
-    this.hand(89, 23, (now.getHours() % 12) / 12 + now.getMinutes() / 720, 3);
-    this.hand(89, 23, now.getMinutes() / 60, 5);
+    this.corkboard(time);
+    if (this.theme.lanternas) for (const x of LANTERNS) this.lantern(x, 16, time);
+    if (this.theme.calendario) this.calendar();
+    if (this.theme.luzes) this.stringLights(time);
+  }
 
-    // Corkboard: one pinned note per finished task
+  /**
+   * The corkboard as the project's kanban: A FAZER, FAZENDO and FEITO, one sticky note per step
+   * of the current plan, colored by how it went. Without a plan, one note per finished task.
+   */
+  private corkboard(time: number) {
     this.box(284, 10, 84, 40, '#6e5133');
     this.rect(287, 13, 78, 34, '#a8814f');
-    const notes = Math.min(this.doneCount, 14);
-    for (let i = 0; i < notes; i++) {
-      const x = 290 + (i % 7) * 11;
-      const y = 16 + Math.floor(i / 7) * 15;
-      this.rect(x + 1, y + 1, 8, 10, 'rgba(0,0,0,0.25)');
-      this.rect(x, y, 8, 10, i % 3 === 0 ? C.note : C.paper);
-      this.rect(x + 1, y + 4, 5, 1, '#b8ad92');
-      this.rect(x + 1, y + 6, 4, 1, '#b8ad92');
-      this.rect(x + 3, y, 2, 2, C.bad);
+    for (let x = 289; x < 365; x += 6) this.rect(x, 14 + (x % 4), 1, 1, '#97723f'); // cork grain
+    for (const col of [1, 2]) this.rect(287 + col * 26, 15, 1, 31, '#8f6c40');
+    const heads = ['#d9cfb8', '#f2a541', '#6fcf7a'];
+    heads.forEach((color, col) => this.rect(289 + col * 26, 15, 22, 2, color));
+
+    const steps = this.board.steps.length ? this.board.steps : Array<PlanStepStatus>(Math.min(this.doneCount, 9)).fill('done');
+    const column = (s: PlanStepStatus) => (s === 'pending' ? 0 : s === 'running' ? 1 : 2);
+    const used = [0, 0, 0];
+    for (const status of steps) {
+      const col = column(status);
+      const n = used[col]++;
+      if (n >= 9) continue; // three rows of three per column
+      const x = 289 + col * 26 + (n % 3) * 8;
+      const y = 22 + Math.floor(n / 3) * 8;
+      const paper = { pending: C.note, running: '#f7b955', done: '#bfe8b0', error: '#f0a097', skipped: '#bdb6a6' }[status];
+      this.rect(x + 1, y + 1, 7, 6, 'rgba(0,0,0,0.25)');
+      this.rect(x, y, 7, 6, paper);
+      this.rect(x + 1, y + 3, 4, 1, 'rgba(60,45,30,0.35)');
+      const blink = status === 'running' && Math.floor(time / 500) % 2;
+      this.rect(x + 3, y, 1, 1, blink ? '#fff4c2' : C.bad); // the pin
+      if (status === 'done') this.rect(x + 5, y + 4, 1, 1, '#2f8a3a');
+      if (status === 'error') this.rect(x + 5, y + 4, 1, 1, '#8a1f17');
+    }
+    // A paper strip pinned over the top edge carries the project's name (lettered in screen pixels).
+    this.rect(305, 7, 42, 7, C.paper);
+    this.rect(305, 13, 42, 1, '#cfc4a8');
+    this.rect(325, 7, 2, 2, C.bad);
+  }
+
+  /** A tear-off calendar under the clock with today's day; the number is lettered in screen pixels. */
+  private calendar() {
+    this.box(81, 35, 16, 13, C.paper);
+    this.rect(82, 36, 14, 3, C.bad);
+    this.rect(84, 35, 1, 2, '#6b5a48');
+    this.rect(93, 35, 1, 2, '#6b5a48');
+  }
+
+  /** A sagging string of bulbs along the top of the wall; each twinkles on its own beat. */
+  private stringLights(time: number) {
+    const hooks = [2, 112, 272, 382];
+    let bulb = 0;
+    for (let h = 0; h < hooks.length - 1; h++) {
+      const a = hooks[h];
+      const b = hooks[h + 1];
+      for (let x = a; x <= b; x++) {
+        const t = (x - a) / (b - a);
+        const y = Math.round(2 + 5 * 4 * t * (1 - t));
+        this.rect(x, y, 1, 1, '#1b1626');
+        if ((x - a) % 9 === 4) {
+          const color = BULBS[bulb++ % BULBS.length];
+          const on = Math.sin(time / 600 + bulb * 1.7) > -0.6;
+          if (on) {
+            this.ctx.fillStyle = `${color}33`;
+            this.ctx.fillRect(x - 2, y, 5, 5);
+          }
+          this.rect(x, y + 1, 2, 2, on ? color : shade(color, 0.45));
+        }
+      }
+    }
+  }
+
+  /** Stone blocks in staggered courses, each a little lighter or darker, lit from above. */
+  private stones() {
+    const base = WALLS.pedra.wall;
+    for (let row = 0, y = 3; y < 49; row++, y += 7) {
+      let x = row % 2 ? -8 : 0;
+      for (let k = 0; x < W; k++) {
+        const w = 14 + ((row * 7 + k * 5) % 3) * 4;
+        const tone = 0.82 + (((row * 13 + k * 7) % 5) * 0.06);
+        const h = Math.min(6, 49 - y);
+        this.rect(x, y, w - 1, h, shade(base, tone));
+        this.rect(x, y, w - 1, 1, shade(base, tone + 0.18)); // lit top edge
+        this.rect(x + w - 2, y + 1, 1, h - 1, shade(base, tone - 0.15));
+        if ((row + k) % 4 === 0) this.rect(x + 3, y + 3, 2, 1, shade(base, tone - 0.1)); // chips and pits
+        x += w;
+      }
+      this.rect(0, y + 6, W, 1, '#171b23'); // mortar
+    }
+  }
+
+  /** An iron wall lantern; the flame flickers and lights its own glass. */
+  private lantern(x: number, y: number, time: number) {
+    const flicker = 0.75 + 0.25 * Math.sin(time / 90 + x) * Math.sin(time / 37 + x * 2);
+    this.rect(x + 2, y - 4, 1, 4, '#1b1626'); // bracket
+    this.rect(x - 1, y - 4, 4, 1, '#1b1626');
+    this.box(x - 3, y, 8, 2, '#2a2230');
+    this.rect(x - 2, y + 2, 6, 7, '#1b1626');
+    this.rect(x - 1, y + 3, 4, 5, `rgba(255, ${170 + Math.round(40 * flicker)}, 90, ${0.55 + 0.4 * flicker})`);
+    this.rect(x, y + 4 + (flicker > 0.8 ? 0 : 1), 2, 3, '#fff1b8');
+    this.rect(x - 3, y + 9, 8, 2, '#2a2230');
+    this.rect(x + 1, y + 11, 1, 1, '#2a2230');
+  }
+
+  /** Ivy trailing from the top of the bookshelf and the curtain rod. */
+  private ivy(time: number) {
+    const sway = Math.sin(time / 1400);
+    for (const [x0, len, step] of [
+      [14, 22, 3],
+      [24, 14, 4],
+      [50, 26, 3],
+      [114, 18, 3],
+      [268, 20, 3],
+    ] as const) {
+      for (let i = 0; i < len; i++) {
+        const x = Math.round(x0 + Math.sin(i / 3 + x0) * 1.5 + (sway * i) / 18);
+        const y = 6 + i;
+        this.rect(x, y, 1, 1, '#2f5a32');
+        if (i % step === 0) {
+          this.rect(x - 1, y, 2, 2, i % 2 ? '#4f9a4a' : '#3d7a3c');
+          this.rect(x + 1, y + 1, 1, 1, '#6cbf5f');
+        }
+      }
+    }
+  }
+
+  /**
+   * By night and at dusk the room dims and each lantern throws a warm pool on the wall, a cone
+   * down to the wainscot and a glow on the floor, flickering with the flame.
+   */
+  private lanternLight(time: number) {
+    if (!this.theme.lanternas || this.theme.periodo === 'dia') return;
+    const { ctx } = this;
+    ctx.fillStyle = `rgba(6, 4, 14, ${this.theme.periodo === 'noite' ? 0.22 : 0.12})`;
+    ctx.fillRect(0, 0, W, H);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (const x of LANTERNS) {
+      const flicker = 0.85 + 0.15 * Math.sin(time / 90 + x) * Math.sin(time / 37 + x * 2);
+      const glow = ctx.createRadialGradient(x + 1, 21, 1, x + 1, 21, 44);
+      glow.addColorStop(0, `rgba(255, 170, 80, ${0.45 * flicker})`);
+      glow.addColorStop(1, 'rgba(255, 170, 80, 0)');
+      ctx.fillStyle = glow;
+      ctx.fillRect(x - 44, 0, 90, 70);
+      ctx.fillStyle = `rgba(255, 175, 90, ${0.07 * flicker})`;
+      ctx.beginPath();
+      ctx.moveTo(x - 2, 27);
+      ctx.lineTo(x + 4, 27);
+      ctx.lineTo(x + 20, WALL_BOTTOM);
+      ctx.lineTo(x - 18, WALL_BOTTOM);
+      ctx.closePath();
+      ctx.fill();
+      const pool = ctx.createRadialGradient(x + 1, WALL_BOTTOM + 8, 1, x + 1, WALL_BOTTOM + 8, 36);
+      pool.addColorStop(0, `rgba(255, 150, 60, ${0.22 * flicker})`);
+      pool.addColorStop(1, 'rgba(255, 150, 60, 0)');
+      ctx.fillStyle = pool;
+      ctx.fillRect(x - 36, WALL_BOTTOM - 28, 74, 72);
+    }
+    ctx.restore();
+  }
+
+  /** Lightning now and then in a storm, except by day. */
+  private flashing(time: number) {
+    return this.theme.clima === 'chuva' && this.theme.periodo !== 'dia' && time % LIGHTNING_EVERY < 130;
+  }
+
+  /** Rain or snow over the window view (the city or the user's picture), inside the glass. */
+  private weather(time: number) {
+    const { clima } = this.theme;
+    if (clima === 'chuva') {
+      this.ctx.fillStyle = 'rgba(25, 30, 48, 0.4)'; // overcast
+      this.ctx.fillRect(132, 10, 120, 34);
+      for (let i = 0; i < 48; i++) {
+        const x = 130 + ((i * 53 + time / 8) % 126);
+        const y = 6 + ((i * 29 + time / 3) % 42);
+        this.rect(Math.floor(x), Math.floor(y), 1, 3, 'rgba(175, 195, 255, 0.55)');
+      }
+      for (const drop of GLASS_DROPS) {
+        const y = 10 + ((drop.y + time / drop.speed) % 34);
+        this.rect(drop.x, Math.floor(y), 1, 2, 'rgba(215, 228, 255, 0.6)');
+      }
+      if (this.flashing(time)) {
+        this.ctx.fillStyle = 'rgba(235, 240, 255, 0.6)';
+        this.ctx.fillRect(132, 10, 120, 34);
+      }
+    } else if (clima === 'neve') {
+      for (let i = 0; i < 36; i++) {
+        const x = 132 + ((i * 41 + Math.sin(time / 900 + i) * 3 + 120) % 120);
+        const y = 8 + ((i * 23 + time / 45) % 38);
+        this.rect(Math.floor(x), Math.floor(y), i % 4 ? 1 : 2, i % 4 ? 1 : 2, 'rgba(250, 252, 255, 0.85)');
+      }
     }
   }
 
@@ -418,6 +763,16 @@ export class Scene {
         this.rect(0, y, W, plankH, C.plank[p.color]);
         this.rect(0, y, W, 1, C.plankLight);
         this.rect(0, y + plankH - 1, W, 1, C.floorLine);
+        // Each board a shade apart, grain flecks, and nails at the ends
+        for (let x = p.offset - 74, seg = 0; x < W; x += 74, seg++) {
+          if ((seg + row) % 3 === 0) this.rect(Math.max(0, x + 1), y, 73, plankH - 1, 'rgba(20, 10, 5, 0.08)');
+          if ((seg + row) % 4 === 1) this.rect(Math.max(0, x + 1), y + 1, 73, 1, 'rgba(255, 220, 170, 0.05)');
+        }
+        for (let x = (p.offset * 3 + row * 11) % 23; x < W; x += 23) this.rect(x, y + 2 + (x % 3), 3, 1, 'rgba(60, 35, 20, 0.28)');
+        for (let x = p.offset; x < W; x += 74) {
+          this.rect(x + 2, y + 1, 1, 1, '#3a2a20');
+          this.rect(x + 2, y + plankH - 3, 1, 1, '#3a2a20');
+        }
         // Board ends, staggered per row so it reads as a wooden floor
         for (let x = p.offset; x < W; x += 74) {
           this.rect(x, y, 1, plankH - 1, C.floorLine);
@@ -437,13 +792,20 @@ export class Scene {
   private city(time: number) {
     const period = this.theme.periodo;
     const look = PERIODS[period];
+    // Rain greys the sky over and hides the sun, the moon and the stars behind the clouds.
+    const rainy = this.theme.clima === 'chuva';
     const sky = this.ctx.createLinearGradient(0, 9, 0, 45);
-    sky.addColorStop(0, look.top);
-    sky.addColorStop(1, look.bottom);
+    sky.addColorStop(0, rainy ? RAIN_SKY[period].top : look.top);
+    sky.addColorStop(1, rainy ? RAIN_SKY[period].bottom : look.bottom);
     this.ctx.fillStyle = sky;
     this.ctx.fillRect(132, 10, 120, 34);
 
-    if (period === 'noite') {
+    if (rainy) {
+      for (let i = 0; i < 6; i++) {
+        const x = 126 + ((i * 29 + time / 500) % 140);
+        this.rect(Math.floor(x), 10 + (i % 3) * 3, 24, 4, RAIN_SKY[period].cloud);
+      }
+    } else if (period === 'noite') {
       for (const s of STARS) if (Math.sin(time / 800 + s.x * 3) > -0.5) this.rect(s.x, s.y, 1, 1, '#e8e4ff');
       this.shootingStar(time);
       this.rect(226, 13, 7, 7, '#f3ecc8');
@@ -557,15 +919,12 @@ export class Scene {
   }
 
   private furniture(time: number) {
-    // Water cooler
-    this.box(266, 34, 12, 14, '#9fd3f0', '#2b3a4a');
-    this.rect(268, 36, 3, 8, 'rgba(255,255,255,0.4)');
-    this.box(264, 47, 16, 24, '#d9dde6', '#5b6475');
-    this.rect(269, 53, 6, 3, '#5b6475');
+    this.waterCooler(time);
     if (this.theme.plantas) {
       this.plant(10, 196);
       this.plant(372, 196);
       this.plant(102, 52);
+      this.ivy(time);
     }
     if (this.theme.extras) {
       this.coffeeCorner(time);
@@ -573,19 +932,219 @@ export class Scene {
     }
   }
 
+  /**
+   * A wooden bookcase: lit left post, shaded right one, a crown on top, and shelves that hold
+   * more than books (leaning and stacked ones, a little plant, a photo, a jar, a globe).
+   */
+  private bookshelf(time: number) {
+    const wood = '#6b4a30';
+    // Carcass: back panel with grain, posts lit from the left, crown and plinth
+    this.rect(13, 12, 44, 56, '#2a1c13');
+    for (let x = 15; x < 56; x += 5) this.rect(x, 13, 1, 54, '#24180f');
+    this.rect(10, 9, 50, 3, shade(wood, 1.15));
+    this.rect(10, 9, 50, 1, shade(wood, 1.4));
+    this.rect(11, 12, 48, 1, '#1b1209');
+    this.rect(11, 12, 3, 57, shade(wood, 1.1));
+    this.rect(11, 12, 1, 57, shade(wood, 1.35));
+    this.rect(56, 12, 3, 57, shade(wood, 0.8));
+    this.rect(58, 12, 1, 57, shade(wood, 0.6));
+    this.rect(10, 68, 50, 2, shade(wood, 0.75));
+    this.rect(10, 70, 50, 1, 'rgba(10, 6, 4, 0.4)');
+
+    type Item =
+      | { t: 'book'; w: number; h: number; c: string }
+      | { t: 'lean'; h: number; c: string }
+      | { t: 'stack'; c: string[] }
+      | { t: 'pot' | 'frame' | 'jar' | 'globe' };
+    const shelves: Item[][] = [
+      [
+        { t: 'book', w: 3, h: 11, c: '#9c3b36' },
+        { t: 'book', w: 4, h: 12, c: '#3f6f9e' },
+        { t: 'book', w: 3, h: 10, c: '#c9963c' },
+        { t: 'book', w: 3, h: 11, c: '#4f8a5c' },
+        { t: 'lean', h: 10, c: '#7a58a0' },
+        { t: 'globe' },
+        { t: 'book', w: 3, h: 12, c: '#b86a3a' },
+      ],
+      [
+        { t: 'stack', c: ['#3f6f9e', '#c9963c', '#9c3b36'] },
+        { t: 'book', w: 3, h: 11, c: '#cfc6b0' },
+        { t: 'book', w: 4, h: 12, c: '#2f5b4a' },
+        { t: 'book', w: 3, h: 10, c: '#a04a6a' },
+        { t: 'pot' },
+      ],
+      [
+        { t: 'frame' },
+        { t: 'book', w: 3, h: 11, c: '#4f8a5c' },
+        { t: 'book', w: 3, h: 12, c: '#3f6f9e' },
+        { t: 'lean', h: 11, c: '#c9963c' },
+        { t: 'jar' },
+        { t: 'book', w: 4, h: 11, c: '#9c3b36' },
+      ],
+    ];
+    shelves.forEach((items, row) => {
+      const floor = 26 + row * 18; // top of this shelf board
+      // The shelf board: lit lip, shadow it casts on the back panel below
+      this.rect(14, floor, 42, 2, shade(wood, 1.2));
+      this.rect(14, floor, 42, 1, shade(wood, 1.45));
+      this.rect(14, floor + 2, 42, 1, 'rgba(0, 0, 0, 0.35)');
+      this.rect(14, floor - 14, 42, 2, 'rgba(0, 0, 0, 0.3)'); // shadow under the shelf above
+      let x = 16;
+      for (const item of items) {
+        if (item.t === 'book') {
+          this.spine(x, floor - item.h, item.w, item.h, item.c);
+          x += item.w + (x % 3 === 0 ? 1 : 0);
+        } else if (item.t === 'lean') {
+          // A book leaning on its neighbour: a stepped diagonal spine
+          for (let i = 0; i < item.h; i++) {
+            const dx = Math.floor((item.h - i) / 3);
+            this.rect(x + dx, floor - i - 1, 3, 1, i === item.h - 1 ? shade(item.c, 1.3) : item.c);
+            this.rect(x + dx, floor - i - 1, 1, 1, shade(item.c, 1.25));
+          }
+          x += 7;
+        } else if (item.t === 'stack') {
+          item.c.forEach((c, i) => {
+            const w = 11 - i * 2;
+            this.rect(x + i, floor - 3 * (i + 1), w, 3, c);
+            this.rect(x + i, floor - 3 * (i + 1), w, 1, shade(c, 1.3));
+            this.rect(x + i + w - 1, floor - 3 * (i + 1), 1, 3, '#e8dcc0'); // page edges
+          });
+          x += 12;
+        } else if (item.t === 'pot') {
+          this.rect(x + 1, floor - 4, 5, 4, '#b0663f');
+          this.rect(x, floor - 5, 7, 1, '#c97a4f');
+          this.rect(x + 2, floor - 9, 1, 4, '#3f7d4b');
+          this.rect(x + 4, floor - 8, 2, 3, '#62ae6c');
+          this.rect(x, floor - 8, 2, 2, '#4f9a5c');
+          this.rect(x + 3, floor - 11, 2, 2, '#62ae6c');
+          x += 8;
+        } else if (item.t === 'frame') {
+          this.rect(x, floor - 9, 8, 9, '#c9a36a');
+          this.rect(x + 1, floor - 8, 6, 7, '#6cb4e4');
+          this.rect(x + 1, floor - 4, 6, 3, '#4f8a5c'); // a landscape photo
+          this.rect(x + 5, floor - 7, 1, 1, '#fff3b0');
+          x += 9;
+        } else if (item.t === 'jar') {
+          this.rect(x, floor - 7, 5, 7, 'rgba(180, 210, 230, 0.55)');
+          this.rect(x + 1, floor - 5, 3, 4, '#d9a441'); // honey, or candy
+          this.rect(x, floor - 8, 5, 1, '#8a5a3c');
+          this.rect(x, floor - 7, 1, 5, 'rgba(255, 255, 255, 0.5)');
+          x += 6;
+        } else {
+          // A small desk globe, its oceans turning slowly
+          const turn = Math.floor(time / 1600) % 3;
+          this.rect(x + 1, floor - 9, 5, 6, '#3f6f9e');
+          this.rect(x + 2 + turn % 2, floor - 8, 2, 2, '#5b9a6a');
+          this.rect(x + 1 + turn, floor - 5, 2, 1, '#5b9a6a');
+          this.rect(x + 1, floor - 9, 1, 1, '#9fc3e6');
+          this.rect(x + 3, floor - 3, 1, 2, '#8a6a3a');
+          this.rect(x + 1, floor - 1, 5, 1, '#8a6a3a');
+          x += 7;
+        }
+      }
+    });
+    // Top of the bookcase: a few books lying down and a trailing plant pot
+    this.rect(14, 4, 12, 2, '#3f6f9e');
+    this.rect(15, 2, 10, 2, '#c9963c');
+    this.rect(14, 4, 12, 1, shade('#3f6f9e', 1.3));
+    this.rect(44, 4, 7, 5, '#b0663f');
+    this.rect(43, 3, 9, 1, '#c97a4f');
+  }
+
+  /** One book spine: lit left edge, shaded right edge, and gilt bands near the top and bottom. */
+  private spine(x: number, y: number, w: number, h: number, color: string) {
+    this.rect(x, y, w, h, color);
+    this.rect(x, y, 1, h, shade(color, 1.3));
+    this.rect(x + w - 1, y, 1, h, shade(color, 0.7));
+    this.rect(x, y, w, 1, shade(color, 0.8));
+    const band = '#d9b65a';
+    this.rect(x + 1, y + 2, Math.max(1, w - 2), 1, band);
+    this.rect(x + 1, y + h - 3, Math.max(1, w - 2), 1, band);
+    if (h > 10) this.rect(x + 1, y + 5, Math.max(1, w - 2), 2, shade(color, 0.85)); // title label
+  }
+
+  /** A round wall clock with a wooden rim, hour marks and the real time. */
+  private clock() {
+    const cx = 89;
+    const cy = 23;
+    // Rim and face as stacked rows, so the circle reads round at this size
+    const rim = [3, 5, 6, 7, 7, 7, 7, 7, 7, 7, 7, 7, 6, 5, 3];
+    rim.forEach((half, i) => {
+      const y = cy - 7 + i;
+      this.rect(cx - half, y, half * 2 + 1, 1, '#5c3f2b');
+      const face = half - 2;
+      if (face > 0 && i > 0 && i < rim.length - 1) this.rect(cx - face, y, face * 2 + 1, 1, i < 4 ? '#fbf5e4' : '#f1e8d2');
+    });
+    this.rect(cx - 7, cy - 4, 1, 9, '#7a5538'); // lit side of the rim
+    for (const [dx, dy] of [[0, -5], [5, 0], [0, 5], [-5, 0]]) this.rect(cx + dx, cy + dy, 1, 1, '#3b2a1c');
+    const now = new Date();
+    this.hand(cx, cy, (now.getHours() % 12) / 12 + now.getMinutes() / 720, 3);
+    this.hand(cx, cy, now.getMinutes() / 60, 4);
+    this.rect(cx, cy, 1, 1, C.bad);
+  }
+
+  /** A water cooler: a bottle with bubbles rising now and then, taps and a drip tray. */
+  private waterCooler(time: number) {
+    // Bottle
+    this.rect(267, 33, 10, 1, '#2b3a4a');
+    this.rect(266, 34, 12, 13, '#7fbfe4');
+    this.rect(266, 34, 12, 3, '#a8d6f0'); // air above the water
+    this.rect(267, 35, 2, 11, 'rgba(255, 255, 255, 0.45)');
+    this.rect(276, 35, 1, 11, '#5a9cc4');
+    this.rect(270, 31, 4, 3, '#3f7fb3'); // cap
+    for (let i = 0; i < 3; i++) {
+      const rise = (time / (700 + i * 300) + i * 0.4) % 1;
+      this.rect(271 + i * 2, Math.round(46 - rise * 9), 1, 1, 'rgba(235, 248, 255, 0.85)');
+    }
+    // Body with a lit side, a recessed panel, taps and a tray
+    this.box(264, 47, 16, 24, '#d9dde6', '#5b6475');
+    this.rect(265, 48, 2, 22, '#eef1f6');
+    this.rect(277, 48, 2, 22, '#b8bfcc');
+    this.rect(268, 51, 8, 8, '#c4cad6');
+    this.rect(269, 53, 2, 3, '#d9574b'); // hot
+    this.rect(273, 53, 2, 3, '#4f8fd6'); // cold
+    this.rect(268, 60, 8, 2, '#5b6475');
+    this.rect(268, 60, 8, 1, '#8a93a6');
+    this.rect(265, 70, 14, 1, 'rgba(10, 8, 20, 0.35)');
+  }
+
   /** Coffee machine on a little cabinet, by the bookshelf. */
   private coffeeCorner(time: number) {
+    const wood = '#5c3f2b';
     this.rect(5, 117, 24, 3, C.deskShadow);
-    this.box(4, 88, 26, 30, '#5c3f2b');
-    this.rect(6, 102, 22, 1, '#3e2a1d');
-    this.rect(16, 94, 2, 3, '#c9a36a'); // knobs
-    this.rect(16, 108, 2, 3, '#c9a36a');
-    this.box(8, 70, 18, 19, '#3a3f52');
-    this.rect(10, 72, 14, 4, '#22252f');
+    // Cabinet: countertop with a lit edge, two doors with raised panels and brass knobs
+    this.box(4, 90, 26, 28, wood);
+    this.rect(3, 88, 28, 3, shade(wood, 1.3));
+    this.rect(3, 88, 28, 1, shade(wood, 1.55));
+    this.rect(5, 91, 1, 26, shade(wood, 1.2));
+    for (const dx of [6, 18]) {
+      this.rect(dx, 93, 10, 22, shade(wood, 0.85));
+      this.rect(dx + 1, 94, 8, 20, shade(wood, 1.08));
+      this.rect(dx + 1, 94, 8, 1, shade(wood, 1.3));
+      this.rect(dx + 1, 113, 8, 1, shade(wood, 0.7));
+    }
+    this.rect(15, 102, 1, 3, '#d9b65a');
+    this.rect(18, 102, 1, 3, '#d9b65a');
+    // Espresso machine: brushed metal, a glowing button, the portafilter and a cup
+    this.rect(8, 70, 18, 18, '#3a3f52');
+    this.rect(8, 70, 18, 1, '#5b6378');
+    this.rect(8, 71, 1, 17, '#4a5166');
+    this.rect(25, 71, 1, 17, '#262a37');
+    this.rect(10, 72, 14, 4, '#1c1f28');
     this.rect(11, 73, 2, 2, Math.floor(time / 900) % 2 ? '#5fd86f' : '#2f6b37');
-    this.rect(15, 76, 4, 4, '#22252f'); // spout
-    this.box(14, 82, 6, 6, '#e8e2d2', '#6b5a48');
+    this.rect(15, 73, 7, 1, '#3d5a7a'); // little display
+    this.rect(13, 77, 8, 2, '#22252f');
+    this.rect(16, 79, 2, 2, '#22252f'); // spout
+    this.rect(9, 86, 16, 2, '#22252f'); // drip grate
+    for (let x = 10; x < 24; x += 2) this.rect(x, 86, 1, 1, '#4a5166');
+    this.box(14, 82, 6, 5, '#efe7d4', '#6b5a48');
+    this.rect(20, 83, 1, 2, '#6b5a48'); // cup handle
+    this.rect(15, 83, 4, 1, '#6b3d22'); // coffee
     this.steam(17, 80, time, 2);
+    // A jar of beans and a sugar bowl beside it
+    this.rect(27, 82, 3, 6, 'rgba(200, 220, 235, 0.5)');
+    this.rect(27, 84, 3, 4, '#5a3420');
+    this.rect(27, 81, 3, 1, '#8a6a3a');
   }
 
   /** Blinks faster the more agents are working. */
@@ -593,9 +1152,17 @@ export class Scene {
     const busy = this.agents.filter((a) => ACTIVE.includes(a.status)).length;
     this.rect(357, 117, 22, 3, C.deskShadow);
     this.box(356, 56, 24, 62, '#2a2d3a');
+    this.rect(357, 57, 1, 60, '#3d4254'); // lit edge
+    this.rect(378, 57, 1, 60, '#1a1c25');
+    this.rect(357, 57, 22, 1, '#454b60');
+    for (let x = 359; x < 377; x += 3) this.rect(x, 113, 2, 2, '#1d2029'); // vent at the foot
     for (let slot = 0; slot < 6; slot++) {
       const y = 59 + slot * 9;
       this.rect(358, y, 20, 7, '#1d2029');
+      this.rect(358, y, 20, 1, '#30354a');
+      this.rect(359, y + 1, 1, 5, '#4a5166'); // handles
+      this.rect(376, y + 1, 1, 5, '#4a5166');
+      for (let v = 361; v < 369; v += 2) this.rect(v, y + 5, 1, 1, '#2f3445'); // vent slits
       this.rect(360, y + 3, 9, 1, '#3a3f52');
       for (let led = 0; led < 3; led++) {
         const rate = 900 - busy * 220;
@@ -913,10 +1480,16 @@ export class Scene {
   }
 
   /** Darker corners at night, a warm or bright wash by day, so the room matches the window. */
-  private vignette() {
+  private vignette(time: number) {
     const look = PERIODS[this.theme.periodo];
     if (look.wash) {
       this.ctx.fillStyle = look.wash;
+      this.ctx.fillRect(0, 0, W, H);
+    }
+    this.lanternLight(time);
+    if (this.theme.clima === 'chuva') {
+      // A grey day indoors, and the whole room lights up for an instant with each lightning.
+      this.ctx.fillStyle = this.flashing(time) ? 'rgba(220, 228, 255, 0.12)' : 'rgba(40, 50, 80, 0.06)';
       this.ctx.fillRect(0, 0, W, H);
     }
     const v = this.ctx.createRadialGradient(W / 2, H / 2, 80, W / 2, H / 2, 250);

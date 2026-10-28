@@ -24,7 +24,7 @@ function setup(...outcomes: RunOutcome[]) {
     list: () => members, coordinator: () => members[0], workers: () => members.slice(1), busy: false,
     get: (id: string) => members.find(member => member.config.id === id),
     label: (member: Member) => member.config.nome, account: (member: Member) => member.config.tipo,
-    handoverNote: () => 'handover', substitute, runAs: run,
+    handoverNote: () => 'handover', substitute, runAs: run, keepGoing: async () => true,
   } as unknown as Team;
   const orchestrator = new Orchestrator(office, team);
   const result = () => (office.snapshot() as Extract<ServerMessage, { type: 'snapshot' }>).plan!;
@@ -52,7 +52,7 @@ describe('general command completion', () => {
     { ok: false, text: 'summary failed' },
     { ok: false, text: 'summary limited', limited: true },
   ])('fails when the final summary fails: %j', async summary => {
-    const { orchestrator, result } = setup(plan('first'), ok(), ok(), summary);
+    const { orchestrator, result } = setup(plan('first', 'second'), ok(), ok(), ok(), ok(), summary);
     await orchestrator.start('test', '.');
     expect(result().status).toBe('error');
     expect(result().steps[0].status).toBe('done');
@@ -108,7 +108,7 @@ describe('general command completion', () => {
   });
 
   it('allows a valid substitute to supply the final summary after a usage limit', async () => {
-    const { orchestrator, result, substitute, members } = setup(plan('first'), ok(), ok(), { ok: false, text: 'limited', limited: true }, ok('completed'));
+    const { orchestrator, result, substitute, members } = setup(plan('first', 'second'), ok(), ok(), ok(), ok(), { ok: false, text: 'limited', limited: true }, ok('completed'));
     substitute.mockReturnValueOnce(members[2]);
     await orchestrator.start('test', '.');
     expect(result()).toMatchObject({ status: 'done', summary: 'completed' });
@@ -123,7 +123,7 @@ describe('general command completion', () => {
   });
 
   it('fails if the execution cap skips required steps', async () => {
-    const outcomes: RunOutcome[] = [plan('first')];
+    const outcomes: RunOutcome[] = [plan('first', 'second')];
     for (let i = 0; i < 12; i++) outcomes.push(ok(), plan(`next-${i}`));
     outcomes.push(ok('completed'));
     const { orchestrator, result, run } = setup(...outcomes);
@@ -147,8 +147,8 @@ describe('general command completion', () => {
   });
 
   it.each(['review', 'summary'])('keeps cancellation during %s stopped rather than reporting failure or success', async stage => {
-    const outcomes = [plan('first'), ok()];
-    if (stage === 'summary') outcomes.push(ok());
+    const outcomes = [plan('first', 'second'), ok()];
+    if (stage === 'summary') outcomes.push(ok(), ok(), ok());
     const { orchestrator, result, run } = setup(...outcomes);
     run.mockImplementationOnce(async () => {
       orchestrator.stop();

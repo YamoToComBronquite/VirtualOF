@@ -34,6 +34,7 @@ vi.mock('../server/team.ts', () => ({
     workers() { return this.members.slice(1); }
     label(member: this['members'][number]) { return member.config.nome; }
     account() { return 'claude'; }
+    async keepGoing() { return true; }
     runAs(member: this['members'][number], _role: string, prompt: string) { return member.runner.run(prompt); }
   },
 }));

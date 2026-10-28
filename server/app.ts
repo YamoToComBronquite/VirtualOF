@@ -114,13 +114,15 @@ export async function startOffice(options: OfficeOptions) {
    */
   async function runDirect(member: Member, prompt: string, images: RunImage[]) {
     // No project yet: chat from an empty folder, just to see the agent respond and its status.
-    const [cwd, note] = isFolder(office.project) ? [office.project, undefined] : [LOBBY, LOBBY_NOTE];
+    const [cwd, lobby] = isFolder(office.project) ? [office.project, undefined] : [LOBBY, LOBBY_NOTE];
+    // The shared board: what the team did in the last general command, so it needn't be retold.
+    const note = [lobby, orchestrator.teamContext(member.config.id)].filter(Boolean).join('\n\n') || undefined;
     const role = member.config.papel === 'folga' || member.config.papel === 'coordenador' ? 'executor' : member.config.papel;
     let current = member;
     try {
       let task = prompt;
       let since = office.lastLogId;
-      let outcome: RunOutcome = { ok: false, text: '', limited: office.isLimited(team.account(current)) };
+      let outcome: RunOutcome = { ok: false, text: '', limited: office.isLimited(team.account(current)) || !(await team.keepGoing(current)) };
       if (!outcome.limited) outcome = await current.runner.run(task, cwd, note, images);
       while (outcome.limited) {
         const cover = office.autoSwitch ? team.substitute(current) : null;

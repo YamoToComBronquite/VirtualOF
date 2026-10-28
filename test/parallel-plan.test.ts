@@ -10,7 +10,7 @@ const ok = (text = 'segue'): RunOutcome => ({ ok: true, text });
 const planReply = (steps: Step[]) => ok('```plano\n' + JSON.stringify(steps) + '\n```');
 
 /** Workers answer by task name; each turn waits until the test releases it, so overlap is visible. */
-function setup(steps: Step[], results: Record<string, RunOutcome> = {}) {
+function setup(steps: Step[], results: Record<string, RunOutcome> = {}, planText?: string) {
   const office = new Office('', {} as Record<Account, AccountStatus>);
   const members = [
     { config: { id: 'lead', nome: 'Lead', papel: 'coordenador', tipo: 'claude' } },
@@ -26,7 +26,7 @@ function setup(steps: Step[], results: Record<string, RunOutcome> = {}) {
   let planned = false;
   const run = vi.fn(async (member: Member, _role: RoleKey, prompt: string): Promise<RunOutcome> => {
     if (member.config.id === 'lead') {
-      if (!planned) return (planned = true), planReply(steps);
+      if (!planned) return (planned = true), planText ? ok(planText) : planReply(steps);
       return /Escreva para o usuário/.test(prompt) ? ok('resumo') : ok();
     }
     const task = /: ([^\n]+)$/m.exec(prompt.split('\n\n')[1] ?? '')?.[1] ?? prompt;
@@ -42,7 +42,7 @@ function setup(steps: Step[], results: Record<string, RunOutcome> = {}) {
     list: () => members, coordinator: () => members[0], workers: () => members.slice(1), busy: false,
     get: (id: string) => members.find((member) => member.config.id === id),
     label: (member: Member) => member.config.nome, account: (member: Member) => member.config.tipo,
-    handoverNote: () => 'handover', substitute, runAs: run,
+    handoverNote: () => 'handover', substitute, runAs: run, keepGoing: async () => true,
   } as unknown as Team;
   const orchestrator = new Orchestrator(office, team);
   const result = () => (office.snapshot() as Extract<ServerMessage, { type: 'snapshot' }>).plan!;
@@ -60,7 +60,7 @@ function setup(steps: Step[], results: Record<string, RunOutcome> = {}) {
     }
     await done;
   };
-  return { orchestrator, result, started, members, substitute, drive, maxParallel: () => maxParallel };
+  return { orchestrator, result, started, members, substitute, drive, run, maxParallel: () => maxParallel };
 }
 
 describe('parallel general command', () => {
@@ -118,5 +118,39 @@ describe('parallel general command', () => {
     await t.drive(t.orchestrator.start('cmd', '.'));
     expect(t.substitute).toHaveBeenCalled();
     expect(t.result().status).toBe('error');
+  });
+
+  it('lets the coordinator answer a simple question by itself, without the team', async () => {
+    const t = setup([], {}, 'O projeto usa Vite e TypeScript.\n```plano\n[]\n```');
+    await t.drive(t.orchestrator.start('qual a stack?', '.'));
+    expect(t.result()).toMatchObject({ status: 'done', summary: 'O projeto usa Vite e TypeScript.', steps: [] });
+    expect(t.started).toEqual([]);
+    expect(t.run).toHaveBeenCalledTimes(1);
+  });
+
+  it('gives a one-step job straight to the agent, with no review or summary round', async () => {
+    const t = setup([{ agente: 'a', tarefa: 'corrigir o botão', depois: [] }]);
+    await t.drive(t.orchestrator.start('cmd', '.'));
+    expect(t.result()).toMatchObject({ status: 'done', summary: 'corrigir o botão feito' });
+    expect(t.run).toHaveBeenCalledTimes(2); // plan + the agent
+  });
+
+  it('still reviews a one-step job that failed, so the coordinator can reassign it', async () => {
+    const t = setup([{ agente: 'a', tarefa: 'quebra', depois: [] }], { quebra: { ok: false, text: 'erro' } });
+    await t.drive(t.orchestrator.start('cmd', '.'));
+    expect(t.run.mock.calls.some(([member, , prompt]) => member.config.id === 'lead' && /falhou/.test(prompt))).toBe(true);
+  });
+
+  it('shows each agent what the others already did (the shared board)', async () => {
+    const t = setup([
+      { agente: 'a', tarefa: 'front', depois: [] },
+      { agente: 'c', tarefa: 'revisar', depois: [1] },
+    ]);
+    await t.drive(t.orchestrator.start('cmd', '.'));
+    const review = t.run.mock.calls.find(([member]) => member.config.id === 'c')![2];
+    expect(review).toContain('Mural da equipe');
+    expect(review).toContain('front feito');
+    expect(t.orchestrator.teamContext('b')).toContain('front feito');
+    expect(t.orchestrator.teamContext('b')).toBe(''); // once per agent and command
   });
 });

@@ -1,7 +1,9 @@
 import { Codex, type Input, type Thread, type ThreadEvent, type ThreadItem } from '@openai/codex-sdk';
-import { basename } from 'node:path';
-import { EDITING_ROLES } from '../../shared/types.ts';
-import { TERMINAL_RULE, type Office } from '../office.ts';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { basename, join } from 'node:path';
+import { EDITING_ROLES, type Quota } from '../../shared/types.ts';
+import type { Office } from '../office.ts';
 import { codexBinary, packagedCodex } from './binaries.ts';
 import { clip } from './describe.ts';
 import { imagesNote, type RoleBrief, type RunImage, type RunOutcome, type Runner } from './runner.ts';
@@ -27,6 +29,44 @@ function parseRetryAt(text: string): number | undefined {
 }
 
 /**
+ * How much of the ChatGPT plan's usage windows the last turn left used. The SDK doesn't report
+ * it, but Codex writes it into the thread's session file (`rate_limits`, newest last).
+ */
+export function readCodexLimits(threadId: string, home = process.env.CODEX_HOME || join(homedir(), '.codex')): Quota | undefined {
+  const root = join(home, 'sessions');
+  // Session files sit in sessions/YYYY/MM/DD/; a thread from the last few days is in one of the newest folders.
+  const newest = (dir: string) => (existsSync(dir) ? readdirSync(dir).sort().reverse().slice(0, 3) : []);
+  for (const year of newest(root)) {
+    for (const month of newest(join(root, year))) {
+      for (const day of newest(join(root, year, month))) {
+        const folder = join(root, year, month, day);
+        const file = readdirSync(folder).find((name) => name.endsWith(`${threadId}.jsonl`));
+        if (file) return parseCodexLimits(readFileSync(join(folder, file), 'utf8'));
+      }
+    }
+  }
+  return undefined;
+}
+
+const WINDOWS: Record<number, string> = { 300: '5 horas', 10080: '7 dias' };
+
+/** The fuller of the two windows (5 hours, 7 days) in the last rate_limits a session file holds. */
+export function parseCodexLimits(text: string): Quota | undefined {
+  const last = text.lastIndexOf('"rate_limits"');
+  if (last < 0) return undefined;
+  const windows = [...text.slice(last).matchAll(/"(?:primary|secondary)":\{"used_percent":([\d.]+),"window_minutes":(\d+),"resets_at":(\d+)\}/g)]
+    .map((m) => ({ used: Number(m[1]) / 100, minutes: Number(m[2]), resetsAt: Number(m[3]) * 1000 }));
+  if (!windows.length) return undefined;
+  const top = windows.reduce((a, b) => (b.used > a.used ? b : a));
+  return {
+    status: top.used >= 1 ? 'limited' : top.used >= 0.8 ? 'warning' : 'ok',
+    utilization: top.used,
+    window: WINDOWS[top.minutes] ?? `${Math.round(top.minutes / 60)} horas`,
+    resetsAt: top.resetsAt,
+  };
+}
+
+/**
  * A Codex thread driven through the Codex SDK, on the user's ChatGPT login. Codex has no
  * per-call approval hook in exec mode, so safety comes from the sandbox: it may only write
  * files while it is an executor.
@@ -38,6 +78,7 @@ export class CodexAgent implements Runner {
   private threadCwd?: string;
   private threadRole?: string;
   private threadModel?: string;
+  private threadFull?: boolean;
   private abort?: AbortController;
   private outcome: RunOutcome = { ok: false, text: '' };
 
@@ -61,19 +102,23 @@ export class CodexAgent implements Runner {
     const role = this.brief();
     // Sandbox and model are fixed per thread, so changing either (even for one covered step)
     // needs a new thread.
-    if (!this.thread || this.threadCwd !== cwd || this.threadRole !== role.key || this.threadModel !== role.model) {
+    const editing = EDITING_ROLES.includes(role.key);
+    const full = editing && this.office.permissionMode === 'auto';
+    if (!this.thread || this.threadCwd !== cwd || this.threadRole !== role.key || this.threadModel !== role.model || this.threadFull !== full) {
       this.threadRole = role.key;
+      this.threadFull = full;
       this.threadModel = role.model;
       this.thread = this.codex.startThread({
         workingDirectory: cwd,
         skipGitRepoCheck: true,
-        sandboxMode: EDITING_ROLES.includes(role.key) ? 'workspace-write' : 'read-only',
+        // Full authorization lifts the sandbox (commands, network, installs); otherwise edits stay in the project.
+        sandboxMode: full ? 'danger-full-access' : editing ? 'workspace-write' : 'read-only',
         model: role.model || undefined,
         approvalPolicy: 'never',
       });
       this.threadCwd = cwd;
       // The SDK has no system prompt, so the role goes in front of the first message.
-      input = `${role.instructions}\n\n${TERMINAL_RULE}\n\n${input}`;
+      input = `${role.instructions}\n\n${this.office.terminalRule()}\n\n${input}`;
     }
     this.abort = new AbortController();
     this.outcome = { ok: false, text: '' };
@@ -102,6 +147,18 @@ export class CodexAgent implements Runner {
 
   stop() {
     this.abort?.abort();
+  }
+
+  /** After a turn, the plan's usage from Codex's own session file; it feeds Consumo and the 90% question. */
+  private readLimits() {
+    let quota: Quota | undefined;
+    try {
+      quota = this.thread?.id ? readCodexLimits(this.thread.id) : undefined;
+    } catch {
+      // the file is Codex's, not ours; without it the office just doesn't know the percentage
+    }
+    if (quota && quota.status !== 'limited') this.office.setQuota('codex', quota);
+    else if (this.office.isLimited('codex')) this.office.setQuota('codex', { status: 'ok' });
   }
 
   private fail(text: string) {
@@ -136,7 +193,7 @@ export class CodexAgent implements Runner {
         this.office.setStatus(id, 'done', 'Terminou a tarefa');
         this.office.write(id, 'result', 'Pronto.');
         this.outcome.ok = true;
-        if (this.office.isLimited('codex')) this.office.setQuota('codex', { status: 'ok' });
+        this.readLimits();
         break;
       case 'turn.failed':
         this.fail(event.error.message);

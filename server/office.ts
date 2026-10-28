@@ -36,6 +36,20 @@ export const TERMINAL_RULE =
   'PRECISA_TERMINAL: <comando a rodar> | <por que, em uma frase>\n' +
   'Uma linha por comando. Depois que ele rodar, ele te avisa e você continua.';
 
+/** With full authorization the agents run commands themselves; only what needs a person goes to the user. */
+const FULL_ACCESS_RULE =
+  'O usuário fala com você por um escritório virtual no navegador e não está olhando nenhum terminal. ' +
+  'Ele te deu autorização total: rode você mesmo os comandos de terminal de que a tarefa precisa (instalar dependências, ' +
+  'rodar build e testes, scripts), sem pedir. Só o que exige uma pessoa (login no navegador, digitar uma senha, ' +
+  'um comando interativo) vai para ele, numa linha exatamente assim:\n' +
+  'PRECISA_TERMINAL: <comando a rodar> | <por que, em uma frase>\n' +
+  'Uma linha por comando. Depois que ele rodar, ele te avisa e você continua.';
+
+/** Above this share of an account's usage window, the office asks before handing it more work. */
+export const NEAR_LIMIT = 0.9;
+
+export type LimitChoice = 'continue' | 'switch';
+
 const MARKER = /^\s*PRECISA_TERMINAL:\s*(.+?)\s*\|\s*(.+?)\s*$/gm;
 
 interface PendingPermission {
@@ -257,6 +271,52 @@ export class Office {
     this.emit({ type: 'project', project });
   }
 
+  /** What the agents are told about the terminal: full authorization lets them run commands. */
+  terminalRule() {
+    return this.permissionMode === 'auto' ? FULL_ACCESS_RULE : TERMINAL_RULE;
+  }
+
+  /** True when an account is past NEAR_LIMIT of its window but not over it yet (Claude and Codex report this). */
+  nearLimit(account: Account) {
+    const quota = this.quota[account];
+    return quota.status !== 'limited' && (quota.utilization ?? 0) >= NEAR_LIMIT;
+  }
+
+  private limitChoices = new Map<Account, { until: number; choice: LimitChoice }>();
+  private limitQuestions = new Map<Account, Promise<LimitChoice>>();
+
+  /**
+   * Near the limit, asks once per account and usage window whether to keep going on it or hand
+   * the work to someone on another account. Asks even with automatic approval: that covers tools,
+   * not spending. Several agents of the same account share one card.
+   */
+  confirmLimit(agentId: string, account: Account, signal?: AbortSignal): Promise<LimitChoice> {
+    if (!this.nearLimit(account)) return Promise.resolve('continue');
+    const saved = this.limitChoices.get(account);
+    if (saved && saved.until > Date.now()) return Promise.resolve(saved.choice);
+    const asking = this.limitQuestions.get(account);
+    if (asking) return asking;
+    const quota = this.quota[account];
+    const percent = Math.round((quota.utilization ?? 0) * 100);
+    const name = { claude: 'Claude', codex: 'ChatGPT (Codex)', antigravity: 'Google', opencode: 'OpenCode' }[account];
+    const request: PermissionRequest = {
+      id: randomUUID(),
+      agentId,
+      tool: 'Limite de uso',
+      summary: `A conta do ${name} está em ${percent}% do limite${quota.window ? ` de ${quota.window}` : ''}.`,
+      kind: 'limit',
+    };
+    const question = this.post(request, signal, `Perto do limite: ${request.summary}`).then((allow) => {
+      this.limitQuestions.delete(account);
+      if (signal?.aborted) return 'continue' as const;
+      const choice: LimitChoice = allow ? 'continue' : 'switch';
+      this.limitChoices.set(account, { until: quota.resetsAt ?? Date.now() + 60 * 60 * 1000, choice });
+      return choice;
+    });
+    this.limitQuestions.set(account, question);
+    return question;
+  }
+
   /** Puts a sticky note on the board and waits for the user's answer (or the abort signal). */
   askPermission(agentId: string, tool: string, summary: string, signal?: AbortSignal): Promise<boolean> {
     if (signal?.aborted) return Promise.resolve(false);
@@ -264,7 +324,12 @@ export class Office {
       this.write(agentId, 'permission', `Aprovado automaticamente: ${tool} · ${summary}`);
       return Promise.resolve(true);
     }
-    const request: PermissionRequest = { id: randomUUID(), agentId, tool, summary };
+    return this.post({ id: randomUUID(), agentId, tool, summary }, signal, `Pediu permissão: ${tool} · ${summary}`);
+  }
+
+  private post(request: PermissionRequest, signal: AbortSignal | undefined, logLine: string): Promise<boolean> {
+    if (signal?.aborted) return Promise.resolve(false);
+    const { agentId } = request;
     return new Promise((resolve) => {
       const settle = (allow: boolean) => {
         if (!this.pending.delete(request.id)) return;
@@ -276,20 +341,25 @@ export class Office {
       signal?.addEventListener('abort', onAbort, { once: true });
       this.pending.set(request.id, { request, resolve: settle });
       this.emit({ type: 'permission', request });
-      this.write(agentId, 'permission', `Pediu permissão: ${tool} · ${summary}`);
+      this.write(agentId, 'permission', logLine);
     });
   }
 
   answerPermission(id: string, allow: boolean) {
     const pending = this.pending.get(id);
     if (!pending) return;
-    this.write(pending.request.agentId, 'permission', allow ? `Aprovado: ${pending.request.tool}` : `Negado: ${pending.request.tool}`);
+    const { request } = pending;
+    const answer = request.kind === 'limit' ? (allow ? 'Continuar na mesma conta' : 'Trocar de agente') : allow ? 'Aprovado' : 'Negado';
+    this.write(request.agentId, 'permission', `${answer}: ${request.tool}`);
     pending.resolve(allow);
   }
 
-  /** Approves or denies every sticky note waiting now. Terminal cards stay: only the user can do those. */
+  /**
+   * Approves or denies every tool request waiting now. Terminal cards and limit questions stay:
+   * only the user can do those.
+   */
   answerAllPermissions(allow: boolean) {
-    for (const id of [...this.pending.keys()]) this.answerPermission(id, allow);
+    for (const [id, { request }] of [...this.pending]) if (request.kind !== 'limit') this.answerPermission(id, allow);
   }
 
   /** Switching to 'auto' also lets through the requests already waiting. */

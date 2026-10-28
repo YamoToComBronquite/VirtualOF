@@ -2,9 +2,9 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
-import { TERMINAL_RULE, type Office } from '../office.ts';
+import type { Office } from '../office.ts';
 import { clip } from './describe.ts';
-import type { AgentStatus } from '../../shared/types.ts';
+import { EDITING_ROLES, type AgentStatus } from '../../shared/types.ts';
 import { imagesNote, type RoleBrief, type RunImage, type RunOutcome, type Runner } from './runner.ts';
 
 export const AGY_INSTALL = 'irm https://antigravity.google/cli/install.ps1 | iex';
@@ -95,7 +95,8 @@ export class AgyAgent implements Runner {
     const { id } = this;
     const role = this.brief();
     // A new role or model starts a fresh conversation, like a new folder does.
-    const setup = `${role.key}|${role.model}`;
+    const full = this.office.permissionMode === 'auto' && EDITING_ROLES.includes(role.key);
+    const setup = `${role.key}|${role.model}|${full}`;
     if (this.conversationCwd !== cwd || this.conversationRole !== setup) this.reset();
     this.conversationCwd = cwd;
     this.conversationRole = setup;
@@ -104,7 +105,7 @@ export class AgyAgent implements Runner {
     // agy has no attachment flag; it can open the files by path.
     if (images.length) input = `${input}\n\n${imagesNote(images)}`;
     // agy has no system prompt flag, so the role goes in front of the first message.
-    if (!this.conversationId) input = `${role.instructions}\n\n${TERMINAL_RULE}\n\n${input}`;
+    if (!this.conversationId) input = `${role.instructions}\n\n${this.office.terminalRule()}\n\n${input}`;
 
     this.stopped = false;
     this.outcome = { ok: false, text: '' };
@@ -114,6 +115,8 @@ export class AgyAgent implements Runner {
     const args = ['-p', input, '--output-format', 'stream-json'];
     if (role.model) args.push('--model', role.model);
     if (this.conversationId) args.push('--conversation', this.conversationId);
+    // Full authorization: agy may run terminal commands too, which headless agy refuses otherwise.
+    if (full) args.push('--dangerously-skip-permissions');
 
     return new Promise((resolve) => {
       let stderr = '';

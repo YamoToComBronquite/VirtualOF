@@ -28,7 +28,7 @@ body {
   margin: 0;
   height: 100vh;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) var(--chat-width, 460px);
+  grid-template-columns: auto minmax(0, 1fr) minmax(0, var(--chat-width, 460px));
   grid-template-rows: minmax(0, 1fr) auto;
   background: var(--night);
   color: var(--text);
@@ -77,11 +77,12 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  min-width: 0;
   min-height: 0;
   padding: 20px 20px 14px;
   background: var(--plum);
   border-left: 1px solid var(--line);
-  overflow: hidden;
+  overflow: auto;
 }
 
 .panel h2 {
@@ -1263,7 +1264,7 @@ select {
 @media (max-width: 860px) {
   body {
     height: auto;
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .office {
@@ -1571,8 +1572,9 @@ select {
   position: relative;
   flex: 1;
   min-height: 0;
-  margin: 0 -20px;
-  padding: 0 20px;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
   overflow-y: auto;
 }
 
@@ -1592,6 +1594,9 @@ select {
 
 .chat__log {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  max-width: 100%;
   gap: 10px;
   margin: 0;
   padding: 4px 0 8px;
@@ -1601,6 +1606,7 @@ select {
 
 .msg {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 4px;
 }
 
@@ -1664,11 +1670,31 @@ select {
   color: var(--ok);
 }
 
+/* Shrink grid/flex items and wrap long paths without clipping their content. */
+.msg,
+.msg > *,
+.event,
+.event details,
+.event summary,
+.event__full,
+.plan,
+.plan summary,
+.plan summary > *,
+.plan__steps,
+.plan__summary,
+.dock {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
 .event[data-kind='task'] summary {
   cursor: pointer;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  white-space: normal;
+}
+
+.plan summary {
+  flex-wrap: wrap;
 }
 
 .event__full {
@@ -1677,6 +1703,7 @@ select {
   background: var(--night);
   border-radius: 4px;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 /* Bottom of the panel: things waiting on the user, the plan, and the message box */
@@ -1883,3 +1910,7 @@ select {
 .composer__images .image-thumb img { width: 54px; height: 40px; }
 .composer__images .image-thumb span { display: none; }
 .composer__images .attachment__remove { width: 22px; height: 22px; right: -6px; top: -6px; padding: 0; line-height: 1; color: var(--text); }
+
+/* The near-limit question stands apart from the tool sticky notes. */
+.note--limit { border-left: 4px solid var(--bad); }
+.note--limit .hint { display: block; margin-top: 4px; }

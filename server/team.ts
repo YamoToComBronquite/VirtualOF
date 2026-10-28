@@ -124,6 +124,17 @@ export class Team {
   }
 
   /**
+   * Before handing work to an agent whose account is near its limit: asks the user whether to keep
+   * going on it. False means hand the work to someone else, which is only offered when someone free
+   * on another account could take it.
+   */
+  async keepGoing(member: Member, taken: ReadonlySet<string> = new Set()): Promise<boolean> {
+    const account = this.account(member);
+    if (!this.office.autoSwitch || !this.office.nearLimit(account) || !this.substitute(member, taken)) return true;
+    return (await this.office.confirmLimit(member.config.id, account)) === 'continue';
+  }
+
+  /**
    * The note a stand-in gets when it takes over a task mid-way: the original task, what the
    * agent that hit its limit already did, and where it stopped, so the work carries on.
    */

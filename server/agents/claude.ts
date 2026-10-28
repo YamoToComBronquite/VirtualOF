@@ -1,5 +1,5 @@
 import { query, type SDKMessage, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
-import { TERMINAL_RULE, type Office } from '../office.ts';
+import type { Office } from '../office.ts';
 import { claudeBinary } from './binaries.ts';
 import { clip, describeTool, statusForTool } from './describe.ts';
 import { imagesNote, type RoleBrief, type RunImage, type RunOutcome, type Runner } from './runner.ts';
@@ -79,11 +79,20 @@ export class ClaudeAgent implements Runner {
           // servers, and every skill they installed.
           settingSources: ['user', 'project', 'local'],
           skills: 'all',
-          systemPrompt: { type: 'preset', preset: 'claude_code', append: `${brief.instructions}\n\n${TERMINAL_RULE}` },
+          systemPrompt: { type: 'preset', preset: 'claude_code', append: `${brief.instructions}\n\n${this.office.terminalRule()}` },
           // Empty means whatever the user's Claude Code is set to.
           model: brief.model || undefined,
           pathToClaudeCodeExecutable: claudeBinary(),
           canUseTool: async (tool, input, { signal }) => {
+            // Mid-task near the limit: the user may hand the rest to an agent on another account.
+            if (this.office.autoSwitch && this.office.nearLimit('claude')) {
+              this.office.setStatus(id, 'waiting', 'Perto do limite: continuar ou trocar?');
+              if ((await this.office.confirmLimit(id, 'claude', signal)) === 'switch') {
+                this.outcome.limited = true;
+                this.abort?.abort();
+                return { behavior: 'deny', message: 'A tarefa vai para um agente de outra conta.' };
+              }
+            }
             this.office.setStatus(id, 'waiting', `Esperando você aprovar: ${tool}`);
             const allow = await this.office.askPermission(id, tool, describeTool(tool, input), signal);
             this.office.setStatus(id, allow ? statusForTool(tool) : 'thinking', allow ? describeTool(tool, input) : 'Permissão negada');
@@ -95,7 +104,11 @@ export class ClaudeAgent implements Runner {
       });
       for await (const message of run) this.handle(message);
     } catch (error) {
-      if (this.abort?.signal.aborted) {
+      if (this.abort?.signal.aborted && this.outcome.limited) {
+        // Stopped to hand over near the limit: the office passes the task on with what was done.
+        this.office.setStatus(id, 'idle', 'Passou a tarefa para outra conta');
+        this.outcome = { ok: false, text: this.outcome.text, limited: true };
+      } else if (this.abort?.signal.aborted) {
         this.office.setStatus(id, 'idle', 'Parado por você');
         this.office.write(id, 'result', 'Tarefa interrompida.');
         this.outcome = { ok: false, text: 'Interrompida pelo usuário.' };

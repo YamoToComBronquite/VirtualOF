@@ -100,6 +100,8 @@ export interface PermissionRequest {
   agentId: string;
   tool: string;
   summary: string;
+  /** 'limit': the account is near its usage limit; allow keeps going on it, deny hands the work over. */
+  kind?: 'limit';
 }
 
 export interface ModelOption {

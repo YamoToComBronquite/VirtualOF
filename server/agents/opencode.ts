@@ -3,9 +3,9 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { createInterface } from 'node:readline';
-import { TERMINAL_RULE, type Office } from '../office.ts';
+import type { Office } from '../office.ts';
 import { clip } from './describe.ts';
-import type { AgentStatus } from '../../shared/types.ts';
+import { EDITING_ROLES, type AgentStatus } from '../../shared/types.ts';
 import { imagesNote, type RoleBrief, type RunImage, type RunOutcome, type Runner } from './runner.ts';
 
 // npm.cmd on Windows: PowerShell's default policy blocks the npm.ps1 that a plain `npm` runs.
@@ -122,7 +122,9 @@ export class OpencodeAgent implements Runner {
   run(prompt: string, cwd: string, note?: string, images: RunImage[] = []): Promise<RunOutcome> {
     const { id } = this;
     const role = this.brief();
-    const setup = `${role.key}|${role.model}`;
+    // Full authorization is set when a session starts, so turning it on or off starts a new one.
+    const full = this.office.permissionMode === 'auto' && EDITING_ROLES.includes(role.key);
+    const setup = `${role.key}|${role.model}|${full}`;
     if (this.sessionCwd !== cwd || this.sessionRole !== setup) this.reset();
     this.sessionCwd = cwd;
     this.sessionRole = setup;
@@ -131,7 +133,7 @@ export class OpencodeAgent implements Runner {
     // Images go as --file attachments; the note with their paths covers any that can't.
     if (images.length) input = `${input}\n\n${imagesNote(images)}`;
     // No system prompt flag here either, so the role goes in front of the first message.
-    if (!this.sessionId) input = `${role.instructions}\n\n${TERMINAL_RULE}\n\n${input}`;
+    if (!this.sessionId) input = `${role.instructions}\n\n${this.office.terminalRule()}\n\n${input}`;
 
     this.stopped = false;
     this.outcome = { ok: false, text: '' };
@@ -148,6 +150,7 @@ export class OpencodeAgent implements Runner {
     const args = ['run', '--format', 'json'];
     if (SAFE_ARG.test(model)) args.push('--model', model);
     if (this.sessionId && SAFE_ARG.test(this.sessionId)) args.push('--session', this.sessionId);
+    if (full) args.push('--auto'); // approves what its config would ask about, commands included
     const attached = fileArgs(exe, images);
     args.push(...attached.args);
     for (const image of attached.skipped) {

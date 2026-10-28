@@ -12,7 +12,7 @@
     },
     "executor": {
       "nome": "Fullstack",
-      "instrucoes": "Você é um desenvolvedor fullstack deste escritório. Faça a tarefa que recebeu, no front ou no back, mexendo só no que ela pede, e diga no fim, em poucas linhas, o que mudou. Siga o AGENTS.md se existir."
+      "instrucoes": "Você é um desenvolvedor fullstack deste escritório. Faça a tarefa que recebeu, no front ou no back, mexendo só no que ela pede. Antes de escrever código novo, procure no projeto (e nas skills de busca, se houver) o que já existe e reaproveite ou importe em vez de reescrever. Diga no fim, em poucas linhas, o que mudou. Siga o AGENTS.md se existir."
     },
     "tester": {
       "nome": "Tester",

@@ -145,7 +145,7 @@
             <button type="button" class="approval__option" data-mode="manual" role="radio" aria-checked="true">Manual</button>
             <button type="button" class="approval__option" data-mode="auto" role="radio" aria-checked="false">Automática</button>
           </div>
-          <span id="approval-flag" class="approval__flag" role="status" hidden>Os agentes aprovam sozinhos</span>
+          <span id="approval-flag" class="approval__flag" role="status" hidden>Autorização total: os agentes aprovam sozinhos e rodam comandos</span>
           <div id="approval-bulk" class="approval__bulk" hidden>
             <button type="button" id="approve-all" class="small"></button>
             <button type="button" id="deny-all" class="ghost small">Negar todas</button>
@@ -235,11 +235,19 @@
         </fieldset>
 
         <fieldset class="choice">
+          <legend>Clima</legend>
+          <label><input type="radio" name="clima" value="limpo" /> Limpo</label>
+          <label><input type="radio" name="clima" value="chuva" /> Chuva</label>
+          <label><input type="radio" name="clima" value="neve" /> Neve</label>
+        </fieldset>
+
+        <fieldset class="choice">
           <legend>Parede</legend>
           <label><input type="radio" name="parede" value="ameixa" /><i class="swatch" style="--c: #2e2645"></i> Ameixa</label>
           <label><input type="radio" name="parede" value="floresta" /><i class="swatch" style="--c: #22382f"></i> Floresta</label>
           <label><input type="radio" name="parede" value="terracota" /><i class="swatch" style="--c: #4a2c26"></i> Terracota</label>
           <label><input type="radio" name="parede" value="grafite" /><i class="swatch" style="--c: #2b2d33"></i> Grafite</label>
+          <label><input type="radio" name="parede" value="pedra" /><i class="swatch" style="--c: #3a4252"></i> Pedra</label>
         </fieldset>
 
         <fieldset class="choice">
@@ -254,7 +262,10 @@
           <label><input type="checkbox" name="gato" /> Gato na janela</label>
           <label><input type="checkbox" name="tapete" /> Tapete</label>
           <label><input type="checkbox" name="plantas" /> Plantas</label>
-          <label><input type="checkbox" name="extras" /> Cafeteira e rack</label>
+          <label><input type="checkbox" name="extras" /> Cafeteira, rack e caixotes</label>
+          <label><input type="checkbox" name="luzes" /> Varal de luzinhas</label>
+          <label><input type="checkbox" name="calendario" /> Calendário</label>
+          <label><input type="checkbox" name="lanternas" /> Lanternas</label>
         </fieldset>
 
         <fieldset class="choice choice--view">

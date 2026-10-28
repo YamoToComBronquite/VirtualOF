@@ -207,7 +207,10 @@ function receive(msg: ServerMessage) {
       const index = state.agents.findIndex((a) => a.id === msg.agent.id);
       const previous = index >= 0 ? state.agents[index].status : undefined;
       if (index >= 0) state.agents[index] = msg.agent;
-      else state.agents.push(msg.agent);
+      else {
+        state.agents.push(msg.agent);
+        if (msg.agent.controllable) scene.hired(msg.agent.id); // "NOVO NA EQUIPE!" over the new desk
+      }
       if (msg.agent.status === 'done' && previous !== 'done') {
         scene.markFinished(msg.agent.id);
         if (!state.plan || state.plan.status !== 'running') notify(`${msg.agent.name} terminou`, msg.agent.activity);
@@ -255,6 +258,7 @@ function receive(msg: ServerMessage) {
       break;
     case 'plan': {
       const was = state.plan?.status;
+      if (msg.plan) drawHandoffs(state.plan, msg.plan);
       state.plan = msg.plan;
       renderCommand();
       if (msg.plan && was !== msg.plan.status && (msg.plan.status === 'done' || msg.plan.status === 'error')) {
@@ -757,6 +761,18 @@ function renderCommand() {
   summary.textContent = plan.summary ?? '';
 }
 
+/** Arrows in the room as work changes hands: handed out, handed over after a limit, handed back. */
+function drawHandoffs(before: Plan | null, after: Plan) {
+  const lead = state.agents.find((a) => a.roleKey === 'coordenador')?.id;
+  const old = new Map(before?.command === after.command ? before.steps.map((s) => [s.id, s]) : []);
+  for (const step of after.steps) {
+    const prev = old.get(step.id);
+    if (step.status === 'running' && prev?.status !== 'running' && lead) scene.link(lead, step.agentId, 'PASSA TAREFA');
+    else if (step.status === 'running' && prev && prev.agentId !== step.agentId) scene.link(prev.agentId, step.agentId, 'TROCA DE BASTÃO');
+    else if (step.status === 'done' && prev?.status === 'running' && lead) scene.link(step.agentId, lead, 'ENTREGA');
+  }
+}
+
 function renderTerminal() {
   $('terminal').replaceChildren(
     ...state.terminal.map((alert) => {
@@ -795,13 +811,19 @@ function renderTerminal() {
 function renderNotes() {
   $('notes').replaceChildren(
     ...state.permissions.map((request) => {
-      const li = el('li', 'note');
+      const limit = request.kind === 'limit';
+      const li = el('li', limit ? 'note note--limit' : 'note');
       const text = el('p');
-      text.append(el('strong', undefined, agentName(request.agentId)), ` quer usar ${request.tool}`, el('code', undefined, request.summary));
-      const allow = el('button', undefined, 'Aprovar');
+      if (limit) {
+        // Near the limit: keep going on this account, or hand the work to someone on another one.
+        text.append(el('strong', undefined, 'Perto do limite de uso'), ` ${request.summary} `, el('span', 'hint', `${agentName(request.agentId)} está esperando.`));
+      } else {
+        text.append(el('strong', undefined, agentName(request.agentId)), ` quer usar ${request.tool}`, el('code', undefined, request.summary));
+      }
+      const allow = el('button', undefined, limit ? 'Continuar' : 'Aprovar');
       allow.type = 'button';
       allow.addEventListener('click', () => send({ type: 'permission', id: request.id, allow: true }));
-      const deny = el('button', 'ghost', 'Negar');
+      const deny = el('button', 'ghost', limit ? 'Trocar de agente' : 'Negar');
       deny.type = 'button';
       deny.addEventListener('click', () => send({ type: 'permission', id: request.id, allow: false }));
       const actions = el('div', 'note__actions');
@@ -821,7 +843,7 @@ function renderApproval() {
     option.setAttribute('aria-checked', String(option.dataset.mode === state.permissionMode));
   }
   $('approval-flag').hidden = !auto;
-  const count = state.permissions.length;
+  const count = state.permissions.filter((p) => p.kind !== 'limit').length;
   $('approval-bulk').hidden = count < 2;
   $('approve-all').textContent = `Aprovar todas (${count})`;
 }
@@ -831,8 +853,8 @@ for (const option of document.querySelectorAll<HTMLButtonElement>('.approval__op
     const mode = option.dataset.mode as PermissionMode;
     if (mode === state.permissionMode) return;
     const warning =
-      'Com a aprovação automática, os agentes podem rodar comandos e editar arquivos sem perguntar. ' +
-      'Os pedidos de terminal continuam esperando você. Ativar?';
+      'Autorização total: os agentes que editam (Claude, Codex, Gemini e OpenCode) rodam comandos no terminal, ' +
+      'instalam dependências e editam arquivos sem perguntar. Só login e senha continuam esperando você. Ativar?';
     if (mode === 'auto' && !confirm(translate(warning))) return;
     send({ type: 'permission-mode', mode });
   });
@@ -1304,10 +1326,10 @@ function shrinkToWindow(file: File): Promise<string> {
 
 function fillAmbienteForm(theme: Theme) {
   const form = $<HTMLFormElement>('ambiente-form');
-  for (const key of ['periodo', 'parede', 'piso'] as const) {
+  for (const key of ['periodo', 'parede', 'piso', 'clima'] as const) {
     form.querySelector<HTMLInputElement>(`input[name="${key}"][value="${theme[key]}"]`)!.checked = true;
   }
-  for (const key of ['gato', 'tapete', 'plantas', 'extras'] as const) {
+  for (const key of ['gato', 'tapete', 'plantas', 'extras', 'luzes', 'calendario', 'lanternas'] as const) {
     form.querySelector<HTMLInputElement>(`input[name="${key}"]`)!.checked = theme[key];
   }
 }
@@ -1328,6 +1350,10 @@ $('ambiente-form').addEventListener('change', (event) => {
     tapete: data.has('tapete'),
     plantas: data.has('plantas'),
     extras: data.has('extras'),
+    clima: data.get('clima') as Theme['clima'],
+    luzes: data.has('luzes'),
+    calendario: data.has('calendario'),
+    lanternas: data.has('lanternas'),
   });
 });
 
@@ -1589,6 +1615,8 @@ const FRAME_MS = 1000 / 12; // a low frame rate keeps the pixel-art feel and spa
 let last = 0;
 function frame(time: number) {
   if (time - last >= FRAME_MS) {
+    // The corkboard follows the open project and the current plan.
+    scene.board = { project: state.project, steps: state.plan?.steps.map((s) => s.status) ?? [] };
     scene.draw(time);
     last = time;
   }
